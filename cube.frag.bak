@@ -1,0 +1,44 @@
+// FragColor = vertexColor;
+        // FragColor = outColor;
+        // GLSL内置的texture、mix函数采样纹理颜色
+        // FragColor = mix(texture(texture0, TexCoord), texture(texture1, TexCoord), opacity); 
+        
+        //----
+        // vec3 lightDir = normalize(LightPos - FragPos);
+        // float theta = dot(lightDir, normalize(light.direction));
+        // float epsilon = light.cutOff_phi - light.cutOff_gamma;
+        // float intensity = clamp((theta - light.cutOff_gamma) / epsilon, 0.0, 1.0);  // 应当不影响ambient
+        // // ambient
+        // vec3 ambient = light.ambient * vec3(texture(material.texture0_diffuse, TexCoords)) * lightColor;
+        // // diffuse
+        // // vec3 lightDir = normalize(-light.direction);
+        // vec3 norm = normalize(Normal);
+        // float diffuse_cos = max(dot(lightDir, norm), 0.0f);
+        // float distance = float(dot(LightPos - FragPos, LightPos - FragPos));
+        // float F = light.constant + light.linear * distance + light.quadratic * distance * distance;
+        // vec3 diffuse = intensity * light.diffuse * vec3(texture(material.texture0_diffuse, TexCoords)) * diffuse_cos * lightColor / F;
+        // // specular
+        // vec3 cameraDir = normalize( - FragPos); // cameraPos = (0,0,0)
+        // vec3 half_vec = normalize(lightDir + cameraDir);
+        // float specular_cos = pow(max(dot(norm, half_vec), 0.0f), material.shininess);
+        // vec3 specular = intensity * light.specular * vec3(texture(material.texture1_specular, TexCoords)) * specular_cos * lightColor / F;
+
+        // // Emission Map
+        // // vec3 emiss_light = matrix_light * vec3(texture(Emission, vec2(TexCoords.x, TexCoords.y + matrixmove)));
+
+        // vec3 result = ambient + diffuse + specular;
+        // // vec3 result = diffuse * objectColor;
+        // FragColor = vec4(result, 1.0f);
+    //----
+
+    // 属性
+    vec3 norm = normalize(Normal);
+    vec3 cameraDir = normalize( - FragPos); // cameraPos = (0,0,0)
+    vec3 result;
+    // 第一阶段：定向光照
+    // vec3 result = CalcDirLight(dirLight, norm, cameraDir);
+    // 第二阶段：点光源
+    for(int i = 0; i < NR_POINT_LIGHTS; i++)
+        result += CalcPointLight(pointLights[i], norm, FragPos, cameraDir);    
+    // 第三阶段：聚光
+    //result += CalcSpotLight(spotLight, norm, FragPos, viewDir);
