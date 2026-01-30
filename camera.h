@@ -16,7 +16,9 @@ enum Camera_Movement {
     LEFT,
     RIGHT,
     UP,
-    DOWN
+    DOWN,
+    JUMP,
+    JUMP_RELEASE,
 };
 
 class Camera {
@@ -74,13 +76,13 @@ public:
     void mouseMovement(float xoffset, float yoffset, bool constrainView = true) {
         xoffset *= mouseSensitivity;
         yoffset *= mouseSensitivity;
-        pitch += yoffset;
+        // pitch += yoffset;
         yaw += xoffset;
         
-        if(constrainView) {
-            pitch = pitch > 89.0f ? 89.0f : pitch;
-            pitch = pitch < -89.0f ? -89.0f : pitch;
-        }
+        // if(constrainView) {
+        //     pitch = pitch > 89.0f ? 89.0f : pitch;
+        //     pitch = pitch < -89.0f ? -89.0f : pitch;
+        // }
         updateViewDirection();
     }
     void mouseScroll(float yoffset) {
@@ -110,6 +112,14 @@ public:
         if(motion ==DOWN) {
             position += glm::vec3(0.0f, -1.0f, 0.0f) * velocity;
         }
+        if(motion == JUMP) {
+            if(position.y >= 0.25f) return;
+            position += glm::vec3(0.0f, 0.3f, 0.0f) * velocity * 1.5f;
+        }
+        if(motion == JUMP_RELEASE) {
+            if(position.y <= 0) return;
+            position -= glm::vec3(0.0f, 0.3f, 0.0f) * velocity * 1.5f;
+        }
     }
 
 private:
@@ -117,6 +127,7 @@ private:
         glm::vec3 _front;
         _front.x = cos(glm::radians(pitch)) * cos(glm::radians(yaw));
         _front.y = sin(glm::radians(pitch));
+        // _front.y = 1.0;
         _front.z = cos(glm::radians(pitch)) * sin(glm::radians(yaw));
         front = glm::normalize(_front);
 

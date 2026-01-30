@@ -80,6 +80,7 @@ int main() {
 
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     // glClearColor(0.87, 0.72, 0.53, 0.0f);   // desert color
 
@@ -308,8 +309,8 @@ int main() {
         ourShader.setVec3("spotLight.direction", glm::vec3(view * (glm::vec4(spotLightPos, 1.0f) - glm::vec4(0, 0, 0, 1.0f))));
 
         ourShader.setVec3("spotLight.ambient", glm::vec3(0.05f, 0.05f, 0.05f));
-        ourShader.setVec3("spotLight.diffuse", glm::vec3(0.5f, 0.5f, 0.5f));
-        ourShader.setVec3("spotLight.specular", glm::vec3(1.0f, 1.0f, 1.0f));
+        ourShader.setVec3("spotLight.diffuse", glm::vec3(1.0f));    // 0.5
+        ourShader.setVec3("spotLight.specular", glm::vec3(1.4f));   // 1.0
 
         ourShader.setFloat("spotLight.constant", 1.0f);
         ourShader.setFloat("spotLight.linear", 0.09f);
