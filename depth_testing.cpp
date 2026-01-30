@@ -33,6 +33,9 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+float near = 0.1f;
+float far = 100.0f;
+
 int main()
 {
     // glfw: initialize and configure
@@ -75,7 +78,9 @@ int main()
     // -----------------------------
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS); // always pass the depth test (same effect as glDisable(GL_DEPTH_TEST))
-
+    // glDepthRange(1.0, 0);
+    // glClearDepth(0.0f);
+    
     // build and compile shaders
     // -------------------------
     Shader shader("./shader/depth_testing/depth_testing.vert", "./shader/depth_testing/depth_testing.frag");
@@ -191,6 +196,8 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         shader.use();
+        glUniform1f(glGetUniformLocation(shader.ID, "near"), near);
+        glUniform1f(glGetUniformLocation(shader.ID, "far"), far);
         glm::mat4 model = glm::mat4(1.0f);
         glm::mat4 view = camera.getLookAt();
         glm::mat4 projection = glm::perspective(glm::radians(camera.fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
@@ -256,6 +263,15 @@ void processInput(GLFWwindow *window)
         camera.keyboardMovement(JUMP_RELEASE, deltaTime);
 
     }
+    if(glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
+        if(near <= 0.1) return;
+        near -= 0.2;
+    }
+    if(glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+        if(near >= far) return;
+        near += 0.2;
+    }
+
 }
 
 void keyboard_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
