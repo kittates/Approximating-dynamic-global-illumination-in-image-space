@@ -81,6 +81,8 @@ int main()
     // glDepthRange(1.0, 0);
     // glClearDepth(0.0f);
     
+    glEnable(GL_STENCIL_TEST);  // 模板测试
+
     // build and compile shaders
     // -------------------------
     Shader shader("./shader/depth_testing/depth_testing.vert", "./shader/depth_testing/depth_testing.frag");
@@ -193,8 +195,9 @@ int main()
         // render
         // ------
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        // glStencilMask(0xFF);
+        // glStencilMask(0x00);
         shader.use();
         glUniform1f(glGetUniformLocation(shader.ID, "near"), near);
         glUniform1f(glGetUniformLocation(shader.ID, "far"), far);
