@@ -67,19 +67,27 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 cameraDir);
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 cameraDir);
 
 void main()
-{
+{   
+    // if(material.useTexture) {
+    //     FragColor = vec4(vec3(texture(material.texture_diffuse1, TexCoords)), 1.0);
+    // } else {
+    //     FragColor = vec4(material.diffuseColor, 1.0);
+    // }
+    // return;  // 临时跳过后续光照计算
+
     vec3 norm = normalize(Normal);
     vec3 cameraDir = normalize(-FragPos);
     vec3 result;
     // direct light
     // vec3 result = CalcDirLight(dirLight, norm, cameraDir);
     // pointlight
-    for(int i = 0; i < NR_POINT_LIGHTS; i++)
-        result = CalcPointLight(pointLights[i], norm, cameraDir);    
+    // for(int i = 0; i < NR_POINT_LIGHTS; i++)
+    //     result = CalcPointLight(pointLights[i], norm, cameraDir);    
     // spotlight
-    result += CalcSpotLight(spotLight, norm, cameraDir);    
+    result = CalcSpotLight(spotLight, norm, cameraDir);    
 
     FragColor = vec4(result, 1.0);
+    // FragColor = vec4(1.0f);
     // FragColor = texture(material.texture_diffuse1, TexCoords);
 }
 
@@ -146,7 +154,7 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 cameraDir) {
         diffuseColor = material.diffuseColor;
         specularColor = material.specularColor;
     }
-
+    
     vec3 lightDir = normalize(light.position - FragPos);
     
     // intensity
