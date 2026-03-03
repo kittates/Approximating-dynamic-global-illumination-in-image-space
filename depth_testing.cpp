@@ -11,6 +11,8 @@
 #include "loadModel/model.h"
 
 #include <iostream>
+#include <random>
+#include <map>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -19,6 +21,7 @@ void processInput(GLFWwindow *window);
 void keyboard_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 unsigned int loadTexture(const char *path);
 void setSpotConfig(Shader &shader, glm::mat4 view, glm::vec3 spotLightPos);
+std::vector<glm::vec3> genRandom(int num);
 
 // settings
 const unsigned int SCR_WIDTH = 1200;
@@ -89,6 +92,12 @@ int main()
     
     glEnable(GL_STENCIL_TEST);  // 模板测试
 
+    glEnable(GL_BLEND); // 开启混合模式
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glEnable(GL_CULL_FACE); 
+    glCullFace(GL_BACK);    // 剔除背向面
+    glFrontFace(GL_CCW);    // CCW为正向面
     // build and compile shaders
     // -------------------------
 
@@ -101,14 +110,14 @@ int main()
     Model ourModel("./models/roadBike/roadBike.obj");
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
-    float cubeVertices[] = {
+    float cubeVertices[] = {    // // 逆时针环绕顺序
     // positions          // normals           // texture Coords
         -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f, 1.0f,
          0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f, 0.0f,
          0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f, 1.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 1.0f,
         -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 1.0f,
 
         -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f,
          0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 0.0f,
@@ -125,11 +134,11 @@ int main()
         -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  1.0f, 0.0f,
 
          0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 1.0f,
          0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f,
          0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 0.0f,
          0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 0.0f,
 
         -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  0.0f, 1.0f,
          0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  1.0f, 1.0f,
@@ -139,26 +148,28 @@ int main()
         -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  0.0f, 1.0f,
 
         -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
          0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
         -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
         -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 1.0f
     };
-    float planeVertices[] = {
+    float planeVertices[] = {   // 逆时针环绕顺序
         // positions          // texture Coords (note we set these higher than 1 (together with GL_REPEAT as texture wrapping mode). this will cause the floor texture to repeat)
          5.0f, -0.5f,  5.0f,  2.0f, 0.0f,
+         -5.0f, -0.5f, -5.0f,  0.0f, 2.0f,
         -5.0f, -0.5f,  5.0f,  0.0f, 0.0f,
-        -5.0f, -0.5f, -5.0f,  0.0f, 2.0f,
 
          5.0f, -0.5f,  5.0f,  2.0f, 0.0f,
+         5.0f, -0.5f, -5.0f,  2.0f, 2.0f,								
         -5.0f, -0.5f, -5.0f,  0.0f, 2.0f,
-         5.0f, -0.5f, -5.0f,  2.0f, 2.0f								
     };
+    std::vector<glm::vec3> vegetation = genRandom(20);  // grass position
     // gen
-    unsigned int cubeVAO, cubeVBO, lightCubeVAO;
+    unsigned int cubeVAO, cubeVBO, lightCubeVAO, grassVAO;
     glGenVertexArrays(1, &cubeVAO);
     glGenVertexArrays(1, &lightCubeVAO);
+    glGenVertexArrays(1, &grassVAO);
     glGenBuffers(1, &cubeVBO);
     // upload
     glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
@@ -177,10 +188,24 @@ int main()
     glBindVertexArray(lightCubeVAO);
     glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
     glEnableVertexAttribArray(0);
-    // glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)(5 * sizeof(float)));
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(0));
-    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glBindVertexArray(0);
+
+    // grass cube
+    glBindVertexArray(grassVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glBindVertexArray(0);
+
 
     // plane VAO
     unsigned int planeVAO, planeVBO;
@@ -199,11 +224,12 @@ int main()
     // -------------
     unsigned int cubeTexture  = loadTexture("./images/marble.jpg");
     unsigned int floorTexture = loadTexture("./images/metal.png");
-
+    // unsigned int grassTexture = loadTexture("./images/grass.png");
+    unsigned int glassTexture = loadTexture("./images/blending_transparent_window.png");
     // shader configuration
     // --------------------
     shader.use();
-    shader.setInt("texture1", 0);
+    shader.setInt("texture1", 0);   // 设置glsl纹理编号
 
     ourShader.use();
     ourShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
@@ -237,12 +263,16 @@ int main()
         shader.setMat4("projection", projection);
         
         // floor
+        glDisable(GL_CULL_FACE);
         glBindVertexArray(planeVAO);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, floorTexture);
         shader.setMat4("model", glm::mat4(1.0f));
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0); 
+
         // light
+        glEnable(GL_CULL_FACE);
         float r = 2.0f; 
         float speed = 0.3f;
         light_step = glfwGetTime() * 2.5f;
@@ -259,14 +289,13 @@ int main()
         glBindVertexArray(lightCubeVAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-
         // bicycle
         glStencilMask(0xff);
         glStencilFunc(GL_ALWAYS, 1, 0xff);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(0, -0.3f, 0));
-        model = glm::scale(model, glm::vec3(1.5f));
+        model = glm::scale(model, glm::vec3(1.5f)); // 使用scale而非normal scale
         ourShader.use();
         ourShader.setMat4("model", model);  // model
         ourShader.setMat4("view", view);
@@ -289,7 +318,7 @@ int main()
         ourModel.Draw(ourShader_rectify);
         glStencilMask(0xff);
         glClear(GL_STENCIL_BUFFER_BIT);
-        // cubes-1    normal box
+        // cubes-1    normal box    
         glStencilMask(0xff);    // 所有位可写入
         glStencilFunc(GL_ALWAYS, 1, 0xff);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
@@ -298,7 +327,7 @@ int main()
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, cubeTexture);
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+        model = glm::translate(model, glm::vec3(-1.0f, 0.05f, -1.0f));
         shader.setMat4("model", model);
         glDrawArrays(GL_TRIANGLES, 0, 36);
         // scaled cube-1
@@ -308,7 +337,7 @@ int main()
         edgeShader.use();
         edgeShader.setFloat("uOutline", outLine);
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));   // glm右乘:T R S
+        model = glm::translate(model, glm::vec3(-1.0f, 0.05f, -1.0f));   // glm右乘:T R S
         // model = glm::scale(model, glm::vec3(1.05f));
         edgeShader.setMat4("model", model);
         edgeShader.setMat4("view", view);
@@ -322,7 +351,7 @@ int main()
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
         shader.use();
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+        model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
         shader.setMat4("model", model);
         glDrawArrays(GL_TRIANGLES, 0, 36);
         // scaled cube-2
@@ -331,7 +360,7 @@ int main()
         glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
         edgeShader.use();
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+        model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
         // model = glm::scale(model, glm::vec3(1.05f));
         edgeShader.setMat4("model", model);
         edgeShader.setMat4("view", view);
@@ -340,6 +369,26 @@ int main()
         glBindVertexArray(0);
         glStencilMask(0xff);
         glClear(GL_STENCIL_BUFFER_BIT);
+
+        // grass
+        glDisable(GL_CULL_FACE);
+        glBindVertexArray(grassVAO);
+        glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_2D, grassTexture);
+        glBindTexture(GL_TEXTURE_2D, glassTexture);
+        std::map<float, glm::vec3> sorted;
+        for(unsigned int i=0; i<vegetation.size(); i++) {
+            float distance = glm::length(camera.position - vegetation[i]);
+            sorted[distance] = vegetation[i];   // sorted map
+        }
+        shader.use();
+        // for(unsigned int i=0; i<vegetation.size(); i++) {
+        for(std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin(); it != sorted.rend(); it++) {
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, it->second);
+            shader.setMat4("model", model);
+            glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
+        }
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -474,6 +523,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 // ---------------------------------------------------
 unsigned int loadTexture(char const *path)
 {
+    stbi_set_flip_vertically_on_load(true);
+    
     unsigned int textureID;
     glGenTextures(1, &textureID);
 
@@ -493,8 +544,14 @@ unsigned int loadTexture(char const *path)
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        if(format == GL_RGBA) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+        else {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        }
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -519,4 +576,20 @@ void setSpotConfig(Shader &shader, glm::mat4 view, glm::vec3 spotLightPos) {
     shader.setFloat("spotLight.quadratic", 0.032f);
     shader.setFloat("spotLight.cutOff_phi", glm::cos(glm::radians(ratio)));
     shader.setFloat("spotLight.cutOff_gamma", glm::cos(glm::radians(ratio + 3.0)));
+}
+
+// gen grass position
+std::vector<glm::vec3> genRandom(int num) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis_x(-4.0f, 4.0f);
+    std::uniform_int_distribution<> dis_z(-4.0f, 4.0f);
+
+    std::vector<glm::vec3> vegetation;
+    for(unsigned int i=0; i<num; i++) {
+        float x = dis_x(gen);
+        float z = dis_z(gen);
+        vegetation.push_back(glm::vec3(x, 0.0f, z));
+    }
+    return vegetation;
 }
