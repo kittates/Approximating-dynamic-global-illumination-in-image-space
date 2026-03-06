@@ -13,6 +13,7 @@
 #include <iostream>
 #include <random>
 #include <map>
+#include <chrono>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -21,7 +22,20 @@ void processInput(GLFWwindow *window);
 void keyboard_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 unsigned int loadTexture(const char *path);
 void setSpotConfig(Shader &shader, glm::mat4 view, glm::vec3 spotLightPos);
+// rend all objs
+void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture,
+        unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, 
+        Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
+        glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection,
+        const std::vector<glm::vec3> &vegetation, Model &ourModel);
 std::vector<glm::vec3> genRandom(int num);
+// VAO_VBO_data
+void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned int &lightCubeVAO, unsigned int &grassVAO,
+            unsigned int &planeVAO, unsigned int &planeVBO, unsigned int &screenVAO, unsigned int &screenVBO,
+            const float cubeVertices[], size_t cubeSize,
+            const float planeVertices[], size_t planeSize,
+            const float quadVertices[], size_t quadSize);
+
 
 // settings
 const unsigned int SCR_WIDTH = 1200;
@@ -106,6 +120,7 @@ int main()
     Shader edgeShader("./shader/depth_testing/shaderSingleColor_rectify.vert", "./shader/depth_testing/shaderSingleColor.frag");
     Shader ourShader("./shader/backpack/backpack.vert", "./shader/backpack/backpack.frag");
     Shader ourShader_rectify("./shader/depth_testing/shaderSingleColor_rectify.vert", "./shader/depth_testing/shaderSingleColor.frag");
+    Shader screenShader("./shader/screenBuffer/screenBuffer.vert", "./shader/screenBuffer/screenBuffer.frag");
 
     Model ourModel("./models/roadBike/roadBike.obj");
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -164,19 +179,200 @@ int main()
          5.0f, -0.5f, -5.0f,  2.0f, 2.0f,								
         -5.0f, -0.5f, -5.0f,  0.0f, 2.0f,
     };
+    // float quadVertices[] = {
+    //     // positions   // texCoords
+    //     -0.3f, 1.0f,  0.0f, 1.0f,
+    //     -0.3f, 0.7f,  0.0f, 0.0f,
+    //      0.3f, 0.7f,  1.0f, 0.0f,
+
+    //     -0.3f, 1.0f,  0.0f, 1.0f,
+    //      0.3f, 0.7f,  1.0f, 0.0f,
+    //      0.3f, 1.0f,  1.0f, 1.0f
+    // };
+    float quadVertices[] = {
+        -1.0f, -0.5f,  0.0f, 1.0f,
+        -1.0f, -1.0f,  0.0f, 0.0f,
+        -0.5f, -1.0f,  1.0f, 0.0f,
+        
+        -1.0f, -0.5f,  0.0f, 1.0f,
+        -0.5f,  -1.0f, 1.0f, 0.0f,
+        -0.5f, -0.5f,  1.0f, 1.0f
+    };
     std::vector<glm::vec3> vegetation = genRandom(20);  // grass position
-    // gen
+
     unsigned int cubeVAO, cubeVBO, lightCubeVAO, grassVAO;
+    unsigned int planeVAO, planeVBO;
+    unsigned int screenVAO, screenVBO;
+    
+    prerequisite_data(cubeVAO, cubeVBO, lightCubeVAO, grassVAO, planeVAO, planeVBO, screenVAO, screenVBO,
+                cubeVertices, sizeof(cubeVertices), planeVertices, sizeof(planeVertices), quadVertices, sizeof(quadVertices));
+
+    // load textures
+    // -------------
+    unsigned int cubeTexture  = loadTexture("./images/marble.jpg");
+    unsigned int floorTexture = loadTexture("./images/metal.png");
+    // unsigned int grassTexture = loadTexture("./images/grass.png");
+    unsigned int glassTexture = loadTexture("./images/blending_transparent_window.png");
+    // shader configuration
+    // --------------------
+    // 不同shader中的uniform sampler2D可以设置相同的编号，因为这两个shader不会同时运行，每次只会激活一个shader
+    shader.use();
+    shader.setInt("texture1", 0);   // 设置glsl纹理编号
+    screenShader.use();
+    screenShader.setInt("screenTexture", 0);
+
+    ourShader.use();
+    ourShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+
+    // self framebuffer
+    // -----------
+    unsigned int framebuffer;
+    glGenFramebuffers(1, &framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+    unsigned int texColorBuffer;    // 得到的结果存在这张纹理中
+    glGenTextures(1, &texColorBuffer);
+    glBindTexture(GL_TEXTURE_2D, texColorBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texColorBuffer, 0); // 颜色attachment
+
+    unsigned int rbo;
+    glGenRenderbuffers(1, &rbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);   // depth stencil attachment
+
+    // check framebuffer status
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);   // 解绑，切回到默认的framebuffer，即屏幕
+    
+    // render loop
+    // -----------
+    while(!glfwWindowShouldClose(window))
+    {
+        // per-frame time logic
+        // --------------------
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // input
+        // -----
+        processInput(window);
+        
+        // bind self framebuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer); 
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_STENCIL_TEST);
+
+        // render
+        // ------
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClearStencil(0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+        shader.use();
+        glUniform1f(glGetUniformLocation(shader.ID, "near"), near);
+        glUniform1f(glGetUniformLocation(shader.ID, "far"), far);
+        glm::mat4 model = glm::mat4(1.0f);
+        camera.yaw += 180.0;           // reverse view direction
+        camera.mouseMovement(0, 0, false);
+        glm::mat4 view = camera.getLookAt();
+        camera.yaw -= 180.0;        // recover view direction
+        camera.mouseMovement(0, 0, true);
+        glm::mat4 projection = glm::perspective(glm::radians(camera.fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        shader.setMat4("view", view);
+        shader.setMat4("projection", projection);
+        
+        // render all objs firstly
+        renderAllObjs(floorTexture, glassTexture, cubeTexture, 
+            planeVAO, lightCubeVAO, cubeVAO, grassVAO, 
+            shader, lightShader, ourShader, ourShader_rectify, edgeShader,
+            model, view, projection,
+            vegetation, ourModel
+        );
+        
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // glClearColor(0.1f, 0.1f, 0.1f, 0.1f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+        view = camera.getLookAt();
+        shader.setMat4("view", view);
+
+        // render all objs again
+        renderAllObjs(floorTexture, glassTexture, cubeTexture, 
+            planeVAO, lightCubeVAO, cubeVAO, grassVAO, 
+            shader, lightShader, ourShader, ourShader_rectify, edgeShader,
+            model, view, projection,
+            vegetation, ourModel
+        );
+        // render self framebuffer
+        glDisable(GL_DEPTH_TEST);   // 避免self framebuffer因深度被discard
+        screenShader.use();
+        glBindVertexArray(screenVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texColorBuffer);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    // optional: de-allocate all resources once they've outlived their purpose:
+    // ------------------------------------------------------------------------
+    glDeleteVertexArrays(1, &cubeVAO);
+    glDeleteVertexArrays(1, &planeVAO);
+    glDeleteVertexArrays(1, &lightCubeVAO);
+    glDeleteVertexArrays(1, &screenVAO);
+    glDeleteVertexArrays(1, &grassVAO);
+
+    glDeleteBuffers(1, &cubeVBO);
+    glDeleteBuffers(1, &planeVBO);
+    glDeleteBuffers(1, &screenVBO);
+    glDeleteFramebuffers(1, &framebuffer);
+
+    glDeleteTextures(1, &cubeTexture);
+    glDeleteTextures(1, &floorTexture);
+    glDeleteTextures(1, &texColorBuffer);
+
+    glDeleteProgram(shader.ID);
+    glDeleteProgram(lightShader.ID);
+    glDeleteProgram(edgeShader.ID);
+    glDeleteProgram(ourShader.ID);
+    ourModel.Terminate();
+    glfwTerminate();
+    return 0;
+}
+
+// VAO_VBO_data
+// unsigned int 在内部被修改，故需要引用传递
+void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned int &lightCubeVAO, unsigned int &grassVAO,
+            unsigned int &planeVAO, unsigned int &planeVBO, unsigned int &screenVAO, unsigned int &screenVBO,
+            const float cubeVertices[], size_t cubeSize,
+            const float planeVertices[], size_t planeSize,
+            const float quadVertices[], size_t quadSize) {
     glGenVertexArrays(1, &cubeVAO);
     glGenVertexArrays(1, &lightCubeVAO);
     glGenVertexArrays(1, &grassVAO);
     glGenBuffers(1, &cubeVBO);
     // upload
     glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW);
+    // glBufferData将数据上传到了GPU内存中的VBO对象本身，数据时持久存储在VBO的，不会因为解绑而消失
+    glBufferData(GL_ARRAY_BUFFER, cubeSize, cubeVertices, GL_STATIC_DRAW);
     // cube
     glBindVertexArray(cubeVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+    // glBindBuffer(GL_ARRAY_BUFFER, cubeVBO); // 多余，应为上一步cubeVBO仍旧绑定在GL_ARRAY_BUFFER
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(1);
@@ -206,62 +402,38 @@ int main()
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glBindVertexArray(0);
 
-
     // plane VAO
-    unsigned int planeVAO, planeVBO;
     glGenVertexArrays(1, &planeVAO);
     glGenBuffers(1, &planeVBO);
     glBindVertexArray(planeVAO);
     glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), &planeVertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, planeSize, planeVertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glBindVertexArray(0);  
 
-    // load textures
-    // -------------
-    unsigned int cubeTexture  = loadTexture("./images/marble.jpg");
-    unsigned int floorTexture = loadTexture("./images/metal.png");
-    // unsigned int grassTexture = loadTexture("./images/grass.png");
-    unsigned int glassTexture = loadTexture("./images/blending_transparent_window.png");
-    // shader configuration
-    // --------------------
-    shader.use();
-    shader.setInt("texture1", 0);   // 设置glsl纹理编号
+    // screen quad VAO
+    glGenVertexArrays(1, &screenVAO);
+    glGenBuffers(1, &screenVBO);
+    glBindVertexArray(screenVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, screenVBO);
+    glBufferData(GL_ARRAY_BUFFER,  quadSize, quadVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glBindVertexArray(0);
+}
 
-    ourShader.use();
-    ourShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
-    // render loop
-    // -----------
-    while(!glfwWindowShouldClose(window))
-    {
-        // per-frame time logic
-        // --------------------
-        float currentFrame = static_cast<float>(glfwGetTime());
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-
-        // input
-        // -----
-        processInput(window);
-
-        // render
-        // ------
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        glClearStencil(0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-        shader.use();
-        glUniform1f(glGetUniformLocation(shader.ID, "near"), near);
-        glUniform1f(glGetUniformLocation(shader.ID, "far"), far);
-        glm::mat4 model = glm::mat4(1.0f);
-        glm::mat4 view = camera.getLookAt();
-        glm::mat4 projection = glm::perspective(glm::radians(camera.fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        shader.setMat4("view", view);
-        shader.setMat4("projection", projection);
-        
+// obj render
+// unsigned int 内部不修改，故不需要引用
+void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture,  
+                unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, 
+                Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
+                glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection,
+                const std::vector<glm::vec3> &vegetation, Model &ourModel) {
         // floor
         glDisable(GL_CULL_FACE);
         glBindVertexArray(planeVAO);
@@ -369,7 +541,6 @@ int main()
         glBindVertexArray(0);
         glStencilMask(0xff);
         glClear(GL_STENCIL_BUFFER_BIT);
-
         // grass
         glDisable(GL_CULL_FACE);
         glBindVertexArray(grassVAO);
@@ -377,6 +548,7 @@ int main()
         // glBindTexture(GL_TEXTURE_2D, grassTexture);
         glBindTexture(GL_TEXTURE_2D, glassTexture);
         std::map<float, glm::vec3> sorted;
+        // from far to near in camera direction
         for(unsigned int i=0; i<vegetation.size(); i++) {
             float distance = glm::length(camera.position - vegetation[i]);
             sorted[distance] = vegetation[i];   // sorted map
@@ -389,31 +561,6 @@ int main()
             shader.setMat4("model", model);
             glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
         }
-
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-
-    // optional: de-allocate all resources once they've outlived their purpose:
-    // ------------------------------------------------------------------------
-    glDeleteVertexArrays(1, &cubeVAO);
-    glDeleteVertexArrays(1, &planeVAO);
-    glDeleteVertexArrays(1, &lightCubeVAO);
-    glDeleteBuffers(1, &cubeVBO);
-    glDeleteBuffers(1, &planeVBO);
-
-    glDeleteTextures(1, &cubeTexture);
-    glDeleteTextures(1, &floorTexture);
-
-    glDeleteShader(shader.ID);
-    glDeleteShader(lightShader.ID);
-    glDeleteShader(edgeShader.ID);
-    glDeleteShader(ourShader.ID);
-    ourModel.Terminate();
-    glfwTerminate();
-    return 0;
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -580,6 +727,25 @@ void setSpotConfig(Shader &shader, glm::mat4 view, glm::vec3 spotLightPos) {
 
 // gen grass position
 std::vector<glm::vec3> genRandom(int num) {
+    // use current time (ms) as seed
+    auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
+    uint32_t seed = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now).count() & 0xffffffff);
+    std::mt19937 gen(seed);
+
+    std::uniform_real_distribution<float> dis_x(-4.0f, 4.0f);
+    std::uniform_real_distribution<float> dis_z(-4.0f, 4.0f);
+
+    std::vector<glm::vec3> vegetation;
+    vegetation.reserve(num);
+    for(unsigned int i = 0; i < num; ++i) {
+        float x = dis_x(gen);
+        float z = dis_z(gen);
+        vegetation.emplace_back(x, 0.0f, z);
+    }
+    return vegetation;
+}
+
+/*std::vector<glm::vec3> genRandom(int num) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis_x(-4.0f, 4.0f);
@@ -592,4 +758,4 @@ std::vector<glm::vec3> genRandom(int num) {
         vegetation.push_back(glm::vec3(x, 0.0f, z));
     }
     return vegetation;
-}
+}*/

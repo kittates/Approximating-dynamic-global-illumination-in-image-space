@@ -14,4 +14,5 @@ void main()
     // Normal = mat3(transpose(inverse(view * model))) * aNormal;  
     vec3 pos = aPos + uOutline * normalize(aNormal);
     gl_Position = projection * view * model * vec4(pos, 1.0f);
+    
 }
