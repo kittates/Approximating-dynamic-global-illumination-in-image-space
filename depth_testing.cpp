@@ -22,24 +22,27 @@ void processInput(GLFWwindow *window);
 void keyboard_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 unsigned int loadTexture(const char *path);
 void setSpotConfig(Shader &shader, glm::mat4 view, glm::vec3 spotLightPos);
-// rend all objs
-void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture,
-        unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, 
+// render all objs
+void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture, unsigned int cubeMapTexture,
+        unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, unsigned int skyboxVAO,
         Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
+        Shader &skyboxShader, Shader &cubeShader, 
         glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection,
         const std::vector<glm::vec3> &vegetation, Model &ourModel);
 std::vector<glm::vec3> genRandom(int num);
 // VAO_VBO_data
 void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned int &lightCubeVAO, unsigned int &grassVAO,
             unsigned int &planeVAO, unsigned int &planeVBO, unsigned int &screenVAO, unsigned int &screenVBO,
+            unsigned int &skyboxVAO, unsigned int &skyboxVBO,
             const float cubeVertices[], size_t cubeSize,
             const float planeVertices[], size_t planeSize,
-            const float quadVertices[], size_t quadSize);
-
+            const float quadVertices[], size_t quadSize,
+            const float skyboxVertices[], size_t skyboxSize);
+unsigned int loadCubeTexture(std::vector<std::string> faces);
 
 // settings
-const unsigned int SCR_WIDTH = 1200;
-const unsigned int SCR_HEIGHT = 800;
+const unsigned int SCR_WIDTH = 1920;
+const unsigned int SCR_HEIGHT = 1080;
 
 // camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -116,13 +119,19 @@ int main()
     // -------------------------
 
     Shader lightShader("./shader/light/light.vert", "./shader/light/light.frag");
+    // the two shaders below are about cube
+    // shader -> floor
     Shader shader("./shader/depth_testing/depth_testing.vert", "./shader/depth_testing/depth_testing.frag");
+    Shader cubeShader("./shader/depth_testing/cube.vert", "./shader/depth_testing/cube.frag");
     Shader edgeShader("./shader/depth_testing/shaderSingleColor_rectify.vert", "./shader/depth_testing/shaderSingleColor.frag");
+    // the two shaders below are about model 
     Shader ourShader("./shader/backpack/backpack.vert", "./shader/backpack/backpack.frag");
     Shader ourShader_rectify("./shader/depth_testing/shaderSingleColor_rectify.vert", "./shader/depth_testing/shaderSingleColor.frag");
+    
     Shader screenShader("./shader/screenBuffer/screenBuffer.vert", "./shader/screenBuffer/screenBuffer.frag");
+    Shader skyboxShader("./shader/skybox/skybox.vert", "./shader/skybox/skybox.frag");
 
-    Model ourModel("./models/roadBike/roadBike.obj");
+    Model ourModel("../models/roadBike/roadBike.obj");
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     float cubeVertices[] = {    // // 逆时针环绕顺序
@@ -179,17 +188,17 @@ int main()
          5.0f, -0.5f, -5.0f,  2.0f, 2.0f,								
         -5.0f, -0.5f, -5.0f,  0.0f, 2.0f,
     };
-    // float quadVertices[] = {
-    //     // positions   // texCoords
-    //     -0.3f, 1.0f,  0.0f, 1.0f,
-    //     -0.3f, 0.7f,  0.0f, 0.0f,
-    //      0.3f, 0.7f,  1.0f, 0.0f,
+    /*float quadVertices[] = {     // top
+        // positions   // texCoords
+        -0.3f, 1.0f,  0.0f, 1.0f,
+        -0.3f, 0.7f,  0.0f, 0.0f,
+         0.3f, 0.7f,  1.0f, 0.0f,
 
-    //     -0.3f, 1.0f,  0.0f, 1.0f,
-    //      0.3f, 0.7f,  1.0f, 0.0f,
-    //      0.3f, 1.0f,  1.0f, 1.0f
-    // };
-    float quadVertices[] = {
+        -0.3f, 1.0f,  0.0f, 1.0f,
+         0.3f, 0.7f,  1.0f, 0.0f,
+         0.3f, 1.0f,  1.0f, 1.0f
+    };*/
+    float quadVertices[] = {    // left bottom
         -1.0f, -0.5f,  0.0f, 1.0f,
         -1.0f, -1.0f,  0.0f, 0.0f,
         -0.5f, -1.0f,  1.0f, 0.0f,
@@ -198,14 +207,70 @@ int main()
         -0.5f,  -1.0f, 1.0f, 0.0f,
         -0.5f, -0.5f,  1.0f, 1.0f
     };
+    float skyboxVertices[] = {
+        // positions          
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f, -1.0f,
+        1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f,  1.0f,
+        1.0f,  1.0f,  1.0f,
+        1.0f,  1.0f,  1.0f,
+        1.0f,  1.0f, -1.0f,
+        1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        1.0f,  1.0f,  1.0f,
+        1.0f,  1.0f,  1.0f,
+        1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+        1.0f,  1.0f, -1.0f,
+        1.0f,  1.0f,  1.0f,
+        1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+        1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+        1.0f, -1.0f,  1.0f
+    };
+    
+    // skycube
+    std::string baseDir = "./images/skybox/";
+    std::vector<std::string> faces {
+        baseDir + "right.jpg",
+        baseDir + "left.jpg",
+        baseDir + "top.jpg",
+        baseDir + "bottom.jpg",
+        baseDir + "front.jpg",
+        baseDir + "back.jpg"
+    };
     std::vector<glm::vec3> vegetation = genRandom(20);  // grass position
 
     unsigned int cubeVAO, cubeVBO, lightCubeVAO, grassVAO;
     unsigned int planeVAO, planeVBO;
     unsigned int screenVAO, screenVBO;
+    unsigned int skyboxVBO, skyboxVAO;
     
-    prerequisite_data(cubeVAO, cubeVBO, lightCubeVAO, grassVAO, planeVAO, planeVBO, screenVAO, screenVBO,
-                cubeVertices, sizeof(cubeVertices), planeVertices, sizeof(planeVertices), quadVertices, sizeof(quadVertices));
+    prerequisite_data(cubeVAO, cubeVBO, lightCubeVAO, grassVAO, planeVAO, planeVBO, screenVAO, screenVBO, skyboxVAO, skyboxVBO,
+                cubeVertices, sizeof(cubeVertices), planeVertices, sizeof(planeVertices), quadVertices, sizeof(quadVertices), skyboxVertices, sizeof(skyboxVertices));
 
     // load textures
     // -------------
@@ -213,17 +278,22 @@ int main()
     unsigned int floorTexture = loadTexture("./images/metal.png");
     // unsigned int grassTexture = loadTexture("./images/grass.png");
     unsigned int glassTexture = loadTexture("./images/blending_transparent_window.png");
+    unsigned int cubeMapTexture = loadCubeTexture(faces);
     // shader configuration
     // --------------------
     // 不同shader中的uniform sampler2D可以设置相同的编号，因为这两个shader不会同时运行，每次只会激活一个shader
     shader.use();
-    shader.setInt("texture1", 0);   // 设置glsl纹理编号
+    shader.setInt("texture1", 0);   // 设置cube shader编号
+    cubeShader.use();
+    cubeShader.setInt("skybox", 0);
     screenShader.use();
     screenShader.setInt("screenTexture", 0);
 
     ourShader.use();
     ourShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
 
+    skyboxShader.use();
+    skyboxShader.setInt("skybox", 0);
     // self framebuffer
     // -----------
     unsigned int framebuffer;
@@ -240,7 +310,8 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texColorBuffer, 0); // 颜色attachment
-
+    
+    // renderbuffer obj-> depth & stencil
     unsigned int rbo;
     glGenRenderbuffers(1, &rbo);
     glBindRenderbuffer(GL_RENDERBUFFER, rbo);
@@ -254,6 +325,9 @@ int main()
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);   // 解绑，切回到默认的framebuffer，即屏幕
     
+    
+    
+
     // render loop
     // -----------
     while(!glfwWindowShouldClose(window))
@@ -279,7 +353,6 @@ int main()
         glClearStencil(0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-        shader.use();
         glUniform1f(glGetUniformLocation(shader.ID, "near"), near);
         glUniform1f(glGetUniformLocation(shader.ID, "far"), far);
         glm::mat4 model = glm::mat4(1.0f);
@@ -289,13 +362,20 @@ int main()
         camera.yaw -= 180.0;        // recover view direction
         camera.mouseMovement(0, 0, true);
         glm::mat4 projection = glm::perspective(glm::radians(camera.fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        shader.setMat4("view", view);
+        
+        // TODO::应该把所有的有关projection的设置放置到while外
+        shader.use();
         shader.setMat4("projection", projection);
+
+        cubeShader.use();
+        cubeShader.setMat4("projection", projection);
+        cubeShader.setVec3("cameraPos", camera.position);
+
         
         // render all objs firstly
-        renderAllObjs(floorTexture, glassTexture, cubeTexture, 
-            planeVAO, lightCubeVAO, cubeVAO, grassVAO, 
-            shader, lightShader, ourShader, ourShader_rectify, edgeShader,
+        renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture,
+            planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
+            shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
             model, view, projection,
             vegetation, ourModel
         );
@@ -305,12 +385,15 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
         view = camera.getLookAt();
-        shader.setMat4("view", view);
-
+        // shader.use();
+        // shader.setMat4("view", view);
+        // cubeShader.use();
+        // cubeShader.setMat4("view", view);
+    
         // render all objs again
-        renderAllObjs(floorTexture, glassTexture, cubeTexture, 
-            planeVAO, lightCubeVAO, cubeVAO, grassVAO, 
-            shader, lightShader, ourShader, ourShader_rectify, edgeShader,
+        renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture,
+            planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
+            shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
             model, view, projection,
             vegetation, ourModel
         );
@@ -359,9 +442,11 @@ int main()
 // unsigned int 在内部被修改，故需要引用传递
 void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned int &lightCubeVAO, unsigned int &grassVAO,
             unsigned int &planeVAO, unsigned int &planeVBO, unsigned int &screenVAO, unsigned int &screenVBO,
+            unsigned int &skyboxVAO, unsigned int &skyboxVBO,
             const float cubeVertices[], size_t cubeSize,
             const float planeVertices[], size_t planeSize,
-            const float quadVertices[], size_t quadSize) {
+            const float quadVertices[], size_t quadSize,
+            const float skyboxVertices[], size_t skyboxSize) {
     glGenVertexArrays(1, &cubeVAO);
     glGenVertexArrays(1, &lightCubeVAO);
     glGenVertexArrays(1, &grassVAO);
@@ -425,26 +510,41 @@ void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned in
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     glBindVertexArray(0);
+
+    // skybox
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    //skyboxSize是传入的数据字节数，不是元素个数
+    glBufferData(GL_ARRAY_BUFFER, skyboxSize, skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glBindVertexArray(0);
 }
 
 // obj render
 // unsigned int 内部不修改，故不需要引用
-void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture,  
-                unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, 
+void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture, unsigned int cubeMapTexture,
+                unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, unsigned int skyboxVAO,
                 Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
+                Shader &skyboxShader, Shader &cubeShader,
                 glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection,
                 const std::vector<glm::vec3> &vegetation, Model &ourModel) {
+        
         // floor
+        shader.use();
         glDisable(GL_CULL_FACE);
         glBindVertexArray(planeVAO);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, floorTexture);
         shader.setMat4("model", glm::mat4(1.0f));
+        shader.setMat4("view", view);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0); 
+        glEnable(GL_CULL_FACE); 
 
         // light
-        glEnable(GL_CULL_FACE);
         float r = 2.0f; 
         float speed = 0.3f;
         light_step = glfwGetTime() * 2.5f;
@@ -490,17 +590,19 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         ourModel.Draw(ourShader_rectify);
         glStencilMask(0xff);
         glClear(GL_STENCIL_BUFFER_BIT);
+
         // cubes-1    normal box    
         glStencilMask(0xff);    // 所有位可写入
         glStencilFunc(GL_ALWAYS, 1, 0xff);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        shader.use();
+        cubeShader.use();
+        cubeShader.setMat4("view", view);
         glBindVertexArray(cubeVAO);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, cubeTexture);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(-1.0f, 0.05f, -1.0f));
-        shader.setMat4("model", model);
+        cubeShader.setMat4("model", model);
         glDrawArrays(GL_TRIANGLES, 0, 36);
         // scaled cube-1
         glStencilMask(0x00);
@@ -521,10 +623,14 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         glStencilMask(0xff);    // 所有位可写入
         glStencilFunc(GL_ALWAYS, 1, 0xff);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        shader.use();
+        // shader.use();
+        cubeShader.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
-        shader.setMat4("model", model);
+        // shader.setMat4("model", model);
+        cubeShader.setMat4("model", model);
         glDrawArrays(GL_TRIANGLES, 0, 36);
         // scaled cube-2
         glStencilMask(0x00);
@@ -561,6 +667,20 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
             shader.setMat4("model", model);
             glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
         }
+
+        // skybox   最用渲染skybox，利用Early-Z优化性能
+        // glDepthMask(GL_FALSE);  // skybox禁止深度写入    // 使用Early-Z优化后不必要了
+        glDepthFunc(GL_LEQUAL); // 天空盒设置的NDC为
+        skyboxShader.use();
+        skyboxShader.setMat4("view", glm::mat4(glm::mat3(view)));   // 去除view的位移，仅保留旋转
+        skyboxShader.setMat4("projection", projection);
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        // glDepthMask(GL_TRUE);   // recover
+        glDepthFunc(GL_LESS);   // recover
+        
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -709,9 +829,50 @@ unsigned int loadTexture(char const *path)
         std::cout << "Texture failed to load at path: " << path << std::endl;
         stbi_image_free(data);
     }
+    stbi_set_flip_vertically_on_load(false);    // recover 
+    return textureID;
+}
+
+// load cubeTexture
+unsigned int loadCubeTexture(std::vector<std::string> faces) {
+    // stbi_set_flip_vertically_on_load(true);
+    int width, height, nrChannels;
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+    
+    for(unsigned int i=0; i<faces.size(); i++) {
+        unsigned char *data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        if(data) {
+            GLenum format;
+            if (nrChannels == 1)
+                format = GL_RED;
+            else if (nrChannels == 3)
+                format = GL_RGB;
+            else if (nrChannels == 4)
+                format = GL_RGBA;
+            // gen cubeTexture
+            glTexImage2D(
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
+                0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data    
+            );
+            stbi_image_free(data);
+        }
+        else
+        {
+            std::cout << "Texture failed to load at path: " << faces[i] << std::endl;
+            stbi_image_free(data);
+        }
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
     return textureID;
 }
+
 void setSpotConfig(Shader &shader, glm::mat4 view, glm::vec3 spotLightPos) {
     shader.setVec3("spotLight.position", glm::vec3(view * glm::vec4(spotLightPos, 1.0f)));
     shader.setVec3("spotLight.direction", glm::vec3(view * (glm::vec4(spotLightPos, 1.0f) - glm::vec4(0, 0, 0, 1.0f))));
