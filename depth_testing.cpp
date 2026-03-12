@@ -29,7 +29,7 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
         Shader &skyboxShader, Shader &cubeShader, 
         glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection,
-        const std::vector<glm::vec3> &vegetation, Model &ourModel);
+        const std::vector<glm::vec3> &vegetation, Model &ourModel, Model &sphere);
 std::vector<glm::vec3> genRandom(int num);
 // VAO_VBO_data
 void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned int &lightCubeVAO, unsigned int &grassVAO,
@@ -42,8 +42,10 @@ void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned in
 unsigned int loadCubeTexture(std::vector<std::string> faces);
 
 // settings
-const unsigned int SCR_WIDTH = 1920;
-const unsigned int SCR_HEIGHT = 1080;
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+// const unsigned int SCR_WIDTH = 1920;
+// const unsigned int SCR_HEIGHT = 1080;
 const unsigned int ENV_SIZE = 1024; // 正方形分辨率 用于dynamic skybox的framebuffer
 
 // camera
@@ -135,6 +137,7 @@ int main()
     Shader skyboxShader("./shader/skybox/skybox.vert", "./shader/skybox/skybox.frag");
 
     Model ourModel("../models/roadBike/roadBike.obj");
+    Model sphere("../models/sphere/sphere.obj");
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     float cubeVertices[] = {    // // 逆时针环绕顺序
@@ -409,14 +412,14 @@ int main()
             }
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
             glm::mat4 model = glm::mat4(1.0f);
-            glm::vec3 dynamicSkyboxCube = glm::vec3(2.0, 0.05, 1.2f);
+            glm::vec3 dynamicSkyboxCube = glm::vec3(2.0f, 2.0f, 1.2f);
             model = glm::translate(model, dynamicSkyboxCube);
             glm::mat4 view = glm::lookAt(dynamicSkyboxCube, dynamicSkyboxCube + envCubeLookAt[i].first, envCubeLookAt[i].second);
             renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture, dynamicEnvSkyboxTexture, false,
                 planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
                 shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
                 model, view, envCubePorjection,
-                vegetation, ourModel
+                vegetation, ourModel, sphere
             );
         }
         // glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -451,7 +454,7 @@ int main()
             planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
             shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
             model, view, projection,
-            vegetation, ourModel
+            vegetation, ourModel, sphere
         );
         
         
@@ -470,7 +473,7 @@ int main()
             planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
             shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
             model, view, projection,
-            vegetation, ourModel
+            vegetation, ourModel, sphere
         );
 
         // render self framebuffer
@@ -620,7 +623,7 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
                 Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
                 Shader &skyboxShader, Shader &cubeShader,
                 glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection,
-                const std::vector<glm::vec3> &vegetation, Model &ourModel) {
+                const std::vector<glm::vec3> &vegetation, Model &ourModel, Model &sphere) {
         
         // floor
         shader.use();
@@ -759,34 +762,41 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
             cubeShader.use();
             cubeShader.setMat4("view", view);
             model = glm::mat4(1.0f);
-            model = glm::translate(model, glm::vec3(2.0f, 0.05f, 1.2f));
+            // 下面的vec3是cube/sphere的世界坐标
+            model = glm::translate(model, glm::vec3(2.0f, 2.0f, 1.2f));
+            model = glm::scale(model, glm::vec3(2.0f));
             cubeShader.setMat4("model", model);
-            glBindVertexArray(cubeVAO);
+            // ------------------
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, dynamicEnvSkyboxTexture);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
+            sphere.Draw(cubeShader);
+            // ------------------
+            // glBindVertexArray(cubeVAO);
+            // glActiveTexture(GL_TEXTURE0);
+            // glBindTexture(GL_TEXTURE_CUBE_MAP, dynamicEnvSkyboxTexture);
+            // glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 
 
         // grass
-        // glBindVertexArray(grassVAO);
-        // glActiveTexture(GL_TEXTURE0);
-        // // glBindTexture(GL_TEXTURE_2D, grassTexture);
-        // glBindTexture(GL_TEXTURE_2D, glassTexture);
-        // std::map<float, glm::vec3> sorted;
-        // // from far to near in camera direction
+        glBindVertexArray(grassVAO);
+        glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_2D, grassTexture);
+        glBindTexture(GL_TEXTURE_2D, glassTexture);
+        std::map<float, glm::vec3> sorted;
+        // from far to near in camera direction
+        for(unsigned int i=0; i<vegetation.size(); i++) {
+            float distance = glm::length(camera.position - vegetation[i]);
+            sorted[distance] = vegetation[i];   // sorted map
+        }
+        shader.use();
         // for(unsigned int i=0; i<vegetation.size(); i++) {
-        //     float distance = glm::length(camera.position - vegetation[i]);
-        //     sorted[distance] = vegetation[i];   // sorted map
-        // }
-        // shader.use();
-        // // for(unsigned int i=0; i<vegetation.size(); i++) {
-        // for(std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin(); it != sorted.rend(); it++) {
-        //     model = glm::mat4(1.0f);
-        //     model = glm::translate(model, it->second);
-        //     shader.setMat4("model", model);
-        //     glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
-        // }
+        for(std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin(); it != sorted.rend(); it++) {
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, it->second);
+            shader.setMat4("model", model);
+            glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
+        }
 
         
 
