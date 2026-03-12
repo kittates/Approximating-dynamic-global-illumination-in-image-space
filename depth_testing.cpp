@@ -23,7 +23,8 @@ void keyboard_callback(GLFWwindow* window, int key, int scancode, int action, in
 unsigned int loadTexture(const char *path);
 void setSpotConfig(Shader &shader, glm::mat4 view, glm::vec3 spotLightPos);
 // render all objs
-void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture, unsigned int cubeMapTexture,
+void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture, unsigned int cubeMapTexture, 
+        unsigned int dynamicEnvSkyboxTexture, bool dynamicEnvSkyboxTexture_Enable,
         unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, unsigned int skyboxVAO,
         Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
         Shader &skyboxShader, Shader &cubeShader, 
@@ -43,6 +44,7 @@ unsigned int loadCubeTexture(std::vector<std::string> faces);
 // settings
 const unsigned int SCR_WIDTH = 1920;
 const unsigned int SCR_HEIGHT = 1080;
+const unsigned int ENV_SIZE = 1024; // 正方形分辨率 用于dynamic skybox的framebuffer
 
 // camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -122,6 +124,7 @@ int main()
     // the two shaders below are about cube
     // shader -> floor
     Shader shader("./shader/depth_testing/depth_testing.vert", "./shader/depth_testing/depth_testing.frag");
+    // 下面这个cube是我要将dynamic skybox实施的box
     Shader cubeShader("./shader/depth_testing/cube.vert", "./shader/depth_testing/cube.frag");
     Shader edgeShader("./shader/depth_testing/shaderSingleColor_rectify.vert", "./shader/depth_testing/shaderSingleColor.frag");
     // the two shaders below are about model 
@@ -251,7 +254,16 @@ int main()
         -1.0f, -1.0f,  1.0f,
         1.0f, -1.0f,  1.0f
     };
-    
+    std::vector<std::pair<glm::vec3, glm::vec3>> envCubeLookAt = {
+        {glm::vec3(1, 0, 0), glm::vec3(0, -1, 0)},
+        {glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0)},
+        {glm::vec3(0, 1, 0), glm::vec3(0, 0, 1)},
+        {glm::vec3(0, -1, 0), glm::vec3(0, 0, -1)},
+        {glm::vec3(0, 0, 1), glm::vec3(0, -1, 0)},
+        {glm::vec3(0, 0, -1), glm::vec3(0, -1, 0)},
+    };
+
+
     // skycube
     std::string baseDir = "./images/skybox/";
     std::vector<std::string> faces {
@@ -296,10 +308,12 @@ int main()
     skyboxShader.setInt("skybox", 0);
     // self framebuffer
     // -----------
-    unsigned int framebuffer;
+    unsigned int framebuffer, envFramebuffer;
     glGenFramebuffers(1, &framebuffer);
+    glGenFramebuffers(1, &envFramebuffer);
+    
+    // 2D
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
     unsigned int texColorBuffer;    // 得到的结果存在这张纹理中
     glGenTextures(1, &texColorBuffer);
     glBindTexture(GL_TEXTURE_2D, texColorBuffer);
@@ -309,24 +323,50 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texColorBuffer, 0); // 颜色attachment
-    
-    // renderbuffer obj-> depth & stencil
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texColorBuffer, 0); // framebuffer的颜色附件绑定在texColorBuffer的面上
+    // renderbuffer obj-> depth & stencil   
     unsigned int rbo;
     glGenRenderbuffers(1, &rbo);
     glBindRenderbuffer(GL_RENDERBUFFER, rbo);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    // glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);   // depth stencil attachment
-
     // check framebuffer status
     if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+        std::cout << "ERROR::FRAMEBUFFER:: TEXTURE_2D Framebuffer is not complete!" << std::endl;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);   // 解绑，切回到默认的framebuffer，即屏幕
     
-    
-    
+    // 3D
+    glBindFramebuffer(GL_FRAMEBUFFER, envFramebuffer);
+    unsigned int dynamicEnvSkyboxTexture;
+    glGenTextures(1, &dynamicEnvSkyboxTexture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, dynamicEnvSkyboxTexture);
+    for(GLenum i=0; i<6; i++) {
+        glTexImage2D(
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
+            0, GL_RGB, ENV_SIZE, ENV_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL    
+        );
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    // depth and stencil
+    unsigned int envRbo;
+    glGenRenderbuffers(1, &envRbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, envRbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, ENV_SIZE, ENV_SIZE);
+    glFramebufferRenderbuffer(
+        GL_FRAMEBUFFER,
+        GL_DEPTH_STENCIL_ATTACHMENT,
+        GL_RENDERBUFFER,
+        envRbo
+    );
+
+
 
     // render loop
     // -----------
@@ -343,18 +383,52 @@ int main()
         processInput(window);
         
         // bind self framebuffer
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer); 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_STENCIL_TEST);
-
+        
         // render
         // ------
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClearStencil(0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        
+        // 绘制dynamic skybox得到纹理
+        // 必须要更改视口，否则得到的纹理图片和立方体面不匹配，造成渲染结果扭曲
+        glViewport(0, 0, ENV_SIZE, ENV_SIZE);
+        glm::mat4 envCubePorjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
+        glBindFramebuffer(GL_FRAMEBUFFER, envFramebuffer);
+        for(unsigned int i=0; i<6; i++) {  
+            glFramebufferTexture2D(     // 将framebuffer的COLOR_ATTACHMENT0挂在到当前面
+                GL_FRAMEBUFFER,
+                GL_COLOR_ATTACHMENT0,
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                dynamicEnvSkyboxTexture,
+                0
+            );
+            if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                std::cout << "ERROR::FRAMEBUFFER::TEXTURE_3D Framebuffer is not complete!" << std::endl;
+            }
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+            glm::mat4 model = glm::mat4(1.0f);
+            glm::vec3 dynamicSkyboxCube = glm::vec3(2.0, 0.05, 1.2f);
+            model = glm::translate(model, dynamicSkyboxCube);
+            glm::mat4 view = glm::lookAt(dynamicSkyboxCube, dynamicSkyboxCube + envCubeLookAt[i].first, envCubeLookAt[i].second);
+            renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture, dynamicEnvSkyboxTexture, false,
+                planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
+                shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
+                model, view, envCubePorjection,
+                vegetation, ourModel
+            );
+        }
+        // glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        
+        // 必须要改回视口
+        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+        // 绘制后视镜
 
-        glUniform1f(glGetUniformLocation(shader.ID, "near"), near);
-        glUniform1f(glGetUniformLocation(shader.ID, "far"), far);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer); 
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        // glUniform1f(glGetUniformLocation(shader.ID, "near"), near);
+        // glUniform1f(glGetUniformLocation(shader.ID, "far"), far);
         glm::mat4 model = glm::mat4(1.0f);
         camera.yaw += 180.0;           // reverse view direction
         camera.mouseMovement(0, 0, false);
@@ -362,7 +436,7 @@ int main()
         camera.yaw -= 180.0;        // recover view direction
         camera.mouseMovement(0, 0, true);
         glm::mat4 projection = glm::perspective(glm::radians(camera.fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        
+
         // TODO::应该把所有的有关projection的设置放置到while外
         shader.use();
         shader.setMat4("projection", projection);
@@ -373,12 +447,13 @@ int main()
 
         
         // render all objs firstly
-        renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture,
+        renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture, dynamicEnvSkyboxTexture, true,
             planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
             shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
             model, view, projection,
             vegetation, ourModel
         );
+        
         
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         // glClearColor(0.1f, 0.1f, 0.1f, 0.1f);
@@ -391,12 +466,13 @@ int main()
         // cubeShader.setMat4("view", view);
     
         // render all objs again
-        renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture,
+        renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture, dynamicEnvSkyboxTexture, true,
             planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
             shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
             model, view, projection,
             vegetation, ourModel
         );
+
         // render self framebuffer
         glDisable(GL_DEPTH_TEST);   // 避免self framebuffer因深度被discard
         screenShader.use();
@@ -404,7 +480,7 @@ int main()
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texColorBuffer);
         glDrawArrays(GL_TRIANGLES, 0, 6);
-
+        glEnable(GL_DEPTH_TEST);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -415,24 +491,37 @@ int main()
     // optional: de-allocate all resources once they've outlived their purpose:
     // ------------------------------------------------------------------------
     glDeleteVertexArrays(1, &cubeVAO);
-    glDeleteVertexArrays(1, &planeVAO);
     glDeleteVertexArrays(1, &lightCubeVAO);
-    glDeleteVertexArrays(1, &screenVAO);
     glDeleteVertexArrays(1, &grassVAO);
-
+    glDeleteVertexArrays(1, &planeVAO);
+    glDeleteVertexArrays(1, &screenVAO);
+    
     glDeleteBuffers(1, &cubeVBO);
     glDeleteBuffers(1, &planeVBO);
     glDeleteBuffers(1, &screenVBO);
+
     glDeleteFramebuffers(1, &framebuffer);
+    glDeleteFramebuffers(1, &envFramebuffer);
+
+    glDeleteRenderbuffers(1, &rbo);
+    glDeleteRenderbuffers(1, &envRbo);
 
     glDeleteTextures(1, &cubeTexture);
     glDeleteTextures(1, &floorTexture);
+    glDeleteTextures(1, &glassTexture);
+    glDeleteTextures(1, &cubeMapTexture);
     glDeleteTextures(1, &texColorBuffer);
+    glDeleteTextures(1, &dynamicEnvSkyboxTexture);
 
-    glDeleteProgram(shader.ID);
     glDeleteProgram(lightShader.ID);
+    glDeleteProgram(shader.ID);
+    glDeleteProgram(cubeShader.ID);
     glDeleteProgram(edgeShader.ID);
     glDeleteProgram(ourShader.ID);
+    glDeleteProgram(ourShader_rectify.ID);
+    glDeleteProgram(screenShader.ID);
+    glDeleteProgram(skyboxShader.ID);
+
     ourModel.Terminate();
     glfwTerminate();
     return 0;
@@ -525,7 +614,8 @@ void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned in
 
 // obj render
 // unsigned int 内部不修改，故不需要引用
-void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture, unsigned int cubeMapTexture,
+void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigned int cubeTexture, unsigned int cubeMapTexture, 
+                unsigned int dynamicEnvSkyboxTexture, bool dynamicEnvSkyboxTexture_Enable,
                 unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, unsigned int skyboxVAO,
                 Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
                 Shader &skyboxShader, Shader &cubeShader,
@@ -646,30 +736,12 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         glDrawArrays(GL_TRIANGLES, 0, 36);
         glBindVertexArray(0);
         glStencilMask(0xff);
-        glClear(GL_STENCIL_BUFFER_BIT);
-        // grass
-        glDisable(GL_CULL_FACE);
-        glBindVertexArray(grassVAO);
-        glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, grassTexture);
-        glBindTexture(GL_TEXTURE_2D, glassTexture);
-        std::map<float, glm::vec3> sorted;
-        // from far to near in camera direction
-        for(unsigned int i=0; i<vegetation.size(); i++) {
-            float distance = glm::length(camera.position - vegetation[i]);
-            sorted[distance] = vegetation[i];   // sorted map
-        }
-        shader.use();
-        // for(unsigned int i=0; i<vegetation.size(); i++) {
-        for(std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin(); it != sorted.rend(); it++) {
-            model = glm::mat4(1.0f);
-            model = glm::translate(model, it->second);
-            shader.setMat4("model", model);
-            glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
-        }
+        glClear(GL_STENCIL_BUFFER_BIT); 
 
         // skybox   最用渲染skybox，利用Early-Z优化性能
+        // 先渲染天空盒，在渲染grass，可以是glass看到天空盒
         // glDepthMask(GL_FALSE);  // skybox禁止深度写入    // 使用Early-Z优化后不必要了
+        glDisable(GL_CULL_FACE);
         glDepthFunc(GL_LEQUAL); // 天空盒设置的NDC为
         skyboxShader.use();
         skyboxShader.setMat4("view", glm::mat4(glm::mat3(view)));   // 去除view的位移，仅保留旋转
@@ -681,6 +753,45 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         // glDepthMask(GL_TRUE);   // recover
         glDepthFunc(GL_LESS);   // recover
         
+        // dynamic skybox 
+        // normal box
+        if(dynamicEnvSkyboxTexture_Enable) {
+            cubeShader.use();
+            cubeShader.setMat4("view", view);
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, glm::vec3(2.0f, 0.05f, 1.2f));
+            cubeShader.setMat4("model", model);
+            glBindVertexArray(cubeVAO);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, dynamicEnvSkyboxTexture);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+
+
+        // grass
+        // glBindVertexArray(grassVAO);
+        // glActiveTexture(GL_TEXTURE0);
+        // // glBindTexture(GL_TEXTURE_2D, grassTexture);
+        // glBindTexture(GL_TEXTURE_2D, glassTexture);
+        // std::map<float, glm::vec3> sorted;
+        // // from far to near in camera direction
+        // for(unsigned int i=0; i<vegetation.size(); i++) {
+        //     float distance = glm::length(camera.position - vegetation[i]);
+        //     sorted[distance] = vegetation[i];   // sorted map
+        // }
+        // shader.use();
+        // // for(unsigned int i=0; i<vegetation.size(); i++) {
+        // for(std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin(); it != sorted.rend(); it++) {
+        //     model = glm::mat4(1.0f);
+        //     model = glm::translate(model, it->second);
+        //     shader.setMat4("model", model);
+        //     glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
+        // }
+
+        
+
+        
+
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
