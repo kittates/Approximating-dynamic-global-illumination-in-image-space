@@ -27,7 +27,7 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         unsigned int dynamicEnvSkyboxTexture, bool dynamicEnvSkyboxTexture_Enable,
         unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, unsigned int skyboxVAO,
         Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
-        Shader &skyboxShader, Shader &cubeShader, 
+        Shader &skyboxShader, Shader &cubeShader, Shader &dynamicCubeShader,
         glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection,
         const std::vector<glm::vec3> &vegetation, Model &ourModel);
 std::vector<glm::vec3> genRandom(int num);
@@ -42,9 +42,12 @@ void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned in
 unsigned int loadCubeTexture(std::vector<std::string> faces);
 
 // settings
-const unsigned int SCR_WIDTH = 1920;
-const unsigned int SCR_HEIGHT = 1080;
-const unsigned int ENV_SIZE = 1024; // 正方形分辨率 用于dynamic skybox的framebuffer
+// const unsigned int SCR_WIDTH = 1920;
+// const unsigned int SCR_HEIGHT = 1080;
+const unsigned int SCR_WIDTH = 512;
+const unsigned int SCR_HEIGHT = 400;
+const unsigned int ENV_SIZE = 512; // 正方形分辨率 用于dynamic skybox的framebuffer
+const glm::vec3 dynamicCubeCoordinate = glm::vec3(2.0f, 1.5f, 1.2f);
 
 // camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -124,7 +127,7 @@ int main()
     // the two shaders below are about cube
     // shader -> floor
     Shader shader("./shader/depth_testing/depth_testing.vert", "./shader/depth_testing/depth_testing.frag");
-    // 下面这个cube是我要将dynamic skybox实施的box
+    // cubeShader是两个cube的shader
     Shader cubeShader("./shader/depth_testing/cube.vert", "./shader/depth_testing/cube.frag");
     Shader edgeShader("./shader/depth_testing/shaderSingleColor_rectify.vert", "./shader/depth_testing/shaderSingleColor.frag");
     // the two shaders below are about model 
@@ -133,6 +136,8 @@ int main()
     
     Shader screenShader("./shader/screenBuffer/screenBuffer.vert", "./shader/screenBuffer/screenBuffer.frag");
     Shader skyboxShader("./shader/skybox/skybox.vert", "./shader/skybox/skybox.frag");
+    // 下面这个cube是我要将dynamic skybox实施的box
+    Shader dynamicCubeShader("./shader/skybox/dynamicSkybox.vert", "./shader/skybox/dynamicSkybox.frag");
 
     Model ourModel("../models/roadBike/roadBike.obj");
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -274,7 +279,7 @@ int main()
         baseDir + "front.jpg",
         baseDir + "back.jpg"
     };
-    std::vector<glm::vec3> vegetation = genRandom(20);  // grass position
+    std::vector<glm::vec3> vegetation = genRandom(10);  // grass position
 
     unsigned int cubeVAO, cubeVBO, lightCubeVAO, grassVAO;
     unsigned int planeVAO, planeVBO;
@@ -297,10 +302,11 @@ int main()
     shader.use();
     shader.setInt("texture1", 0);   // 设置cube shader编号
     cubeShader.use();
-    cubeShader.setInt("skybox", 0);
+    cubeShader.setInt("texture1", 0);
     screenShader.use();
     screenShader.setInt("screenTexture", 0);
-
+    dynamicCubeShader.use();
+    dynamicCubeShader.setInt("skybox", 0);
     ourShader.use();
     ourShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
 
@@ -409,12 +415,12 @@ int main()
             }
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
             glm::mat4 model = glm::mat4(1.0f);
-            glm::vec3 dynamicSkyboxCube = glm::vec3(2.0, 0.05, 1.2f);
-            model = glm::translate(model, dynamicSkyboxCube);
-            glm::mat4 view = glm::lookAt(dynamicSkyboxCube, dynamicSkyboxCube + envCubeLookAt[i].first, envCubeLookAt[i].second);
+            model = glm::translate(model, dynamicCubeCoordinate);
+            glm::mat4 view = glm::lookAt(dynamicCubeCoordinate, dynamicCubeCoordinate + envCubeLookAt[i].first, envCubeLookAt[i].second);
+            // 这里最开始并没有设置projection，所以会导致bug，所以直接在renderAllObjs中设置projection了
             renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture, dynamicEnvSkyboxTexture, false,
                 planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
-                shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
+                shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader, dynamicCubeShader,
                 model, view, envCubePorjection,
                 vegetation, ourModel
             );
@@ -444,12 +450,14 @@ int main()
         cubeShader.use();
         cubeShader.setMat4("projection", projection);
         cubeShader.setVec3("cameraPos", camera.position);
-
+        dynamicCubeShader.use();
+        dynamicCubeShader.setMat4("projection", projection);
+        dynamicCubeShader.setVec3("cameraPos", camera.position);
         
         // render all objs firstly
         renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture, dynamicEnvSkyboxTexture, true,
             planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
-            shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
+            shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader, dynamicCubeShader,
             model, view, projection,
             vegetation, ourModel
         );
@@ -468,7 +476,7 @@ int main()
         // render all objs again
         renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture, dynamicEnvSkyboxTexture, true,
             planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
-            shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
+            shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader, dynamicCubeShader,
             model, view, projection,
             vegetation, ourModel
         );
@@ -618,7 +626,7 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
                 unsigned int dynamicEnvSkyboxTexture, bool dynamicEnvSkyboxTexture_Enable,
                 unsigned int planeVAO, unsigned int lightCubeVAO, unsigned int cubeVAO, unsigned int grassVAO, unsigned int skyboxVAO,
                 Shader &shader, Shader &lightShader, Shader &ourShader, Shader &ourShader_rectify, Shader &edgeShader, 
-                Shader &skyboxShader, Shader &cubeShader,
+                Shader &skyboxShader, Shader &cubeShader, Shader &dynamicCubeShader,
                 glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection,
                 const std::vector<glm::vec3> &vegetation, Model &ourModel) {
         
@@ -628,6 +636,7 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         glBindVertexArray(planeVAO);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, floorTexture);
+        shader.setMat4("projection", projection);
         shader.setMat4("model", glm::mat4(1.0f));
         shader.setMat4("view", view);
         glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -687,9 +696,12 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
         cubeShader.use();
         cubeShader.setMat4("view", view);
+        cubeShader.setMat4("projection", projection);
         glBindVertexArray(cubeVAO);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+        // glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+        glBindTexture(GL_TEXTURE_2D, cubeTexture);
+        // glBindTexture(GL_TEXTURE_)
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(-1.0f, 0.05f, -1.0f));
         cubeShader.setMat4("model", model);
@@ -710,33 +722,33 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         glStencilMask(0xff);    // 否则无法clear stencil buffer
         glClear(GL_STENCIL_BUFFER_BIT);
         // cube-2
-        glStencilMask(0xff);    // 所有位可写入
-        glStencilFunc(GL_ALWAYS, 1, 0xff);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        // shader.use();
-        cubeShader.use();
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
-        // shader.setMat4("model", model);
-        cubeShader.setMat4("model", model);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        // scaled cube-2
-        glStencilMask(0x00);
-        glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-        edgeShader.use();
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
-        // model = glm::scale(model, glm::vec3(1.05f));
-        edgeShader.setMat4("model", model);
-        edgeShader.setMat4("view", view);
-        edgeShader.setMat4("projection", projection);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        glBindVertexArray(0);
-        glStencilMask(0xff);
-        glClear(GL_STENCIL_BUFFER_BIT); 
+        // glStencilMask(0xff);    // 所有位可写入
+        // glStencilFunc(GL_ALWAYS, 1, 0xff);
+        // glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+        // // shader.use();
+        // cubeShader.use();
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+        // model = glm::mat4(1.0f);
+        // model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
+        // // shader.setMat4("model", model);
+        // cubeShader.setMat4("model", model);
+        // glDrawArrays(GL_TRIANGLES, 0, 36);
+        // // scaled cube-2
+        // glStencilMask(0x00);
+        // glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+        // glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        // edgeShader.use();
+        // model = glm::mat4(1.0f);
+        // model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
+        // // model = glm::scale(model, glm::vec3(1.05f));
+        // edgeShader.setMat4("model", model);
+        // edgeShader.setMat4("view", view);
+        // edgeShader.setMat4("projection", projection);
+        // glDrawArrays(GL_TRIANGLES, 0, 36);
+        // glBindVertexArray(0);
+        // glStencilMask(0xff);
+        // glClear(GL_STENCIL_BUFFER_BIT); 
 
         // skybox   最用渲染skybox，利用Early-Z优化性能
         // 先渲染天空盒，在渲染grass，可以是glass看到天空盒
@@ -756,15 +768,18 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         // dynamic skybox 
         // normal box
         if(dynamicEnvSkyboxTexture_Enable) {
-            cubeShader.use();
-            cubeShader.setMat4("view", view);
+            glDisable(GL_STENCIL_TEST);
+            dynamicCubeShader.use();
+            dynamicCubeShader.setMat4("view", view);
             model = glm::mat4(1.0f);
-            model = glm::translate(model, glm::vec3(2.0f, 0.05f, 1.2f));
-            cubeShader.setMat4("model", model);
+            model = glm::translate(model, dynamicCubeCoordinate);
+            model = glm::scale(model, glm::vec3(2.5f));
+            dynamicCubeShader.setMat4("model", model);
             glBindVertexArray(cubeVAO);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, dynamicEnvSkyboxTexture);
             glDrawArrays(GL_TRIANGLES, 0, 36);
+            glEnable(GL_STENCIL_TEST);
         }
 
 

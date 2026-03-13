@@ -1,12 +1,12 @@
 #version 410 core
 out vec4 FragColor;
 
-in vec2 TexCoords;
+// in vec2 TexCoords;
 in vec3 Position;
 in vec3 Normal;
 
-uniform sampler2D texture1;
-// uniform samplerCube skybox;
+// uniform sampler2D texture1;
+uniform samplerCube skybox;
 uniform vec3 cameraPos;
 uniform float near;
 uniform float far;
@@ -15,8 +15,7 @@ uniform float far;
 
 void main()
 {   
-    // 3D sample
-    /*vec3 camera_in = normalize(Position - cameraPos);
+    vec3 camera_in = normalize(Position - cameraPos);
     // reflect
     // vec3 camera_out = reflect(camera_in, normalize(Normal));
     // refract 
@@ -28,11 +27,7 @@ void main()
     FragColor = vec4(texColor.rgb, 1.0);
     // FragColor = vec4(vec3(), 1.0f);
     // float depth = (linearizeDepth(gl_FragCoord.z) - near) / (far - near);
-    // FragColor = vec4(vec3(1.0f - depth), 1.0f);*/
-
-    // 2D sample
-    vec4 color = texture(texture1, TexCoords);
-    FragColor = color;
+    // FragColor = vec4(vec3(1.0f - depth), 1.0f);
     
 }
 
