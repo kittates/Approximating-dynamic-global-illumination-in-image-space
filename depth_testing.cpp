@@ -42,11 +42,14 @@ void prerequisite_data(unsigned int &cubeVAO, unsigned int &cubeVBO, unsigned in
 unsigned int loadCubeTexture(std::vector<std::string> faces);
 
 // settings
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
-// const unsigned int SCR_WIDTH = 1920;
-// const unsigned int SCR_HEIGHT = 1080;
+// const unsigned int SCR_WIDTH = 800;
+// const unsigned int SCR_HEIGHT = 600;
+const unsigned int SCR_WIDTH = 1920;
+const unsigned int SCR_HEIGHT = 1080;
 const unsigned int ENV_SIZE = 1024; // 正方形分辨率 用于dynamic skybox的framebuffer
+// dynamic skybox cube world coordinate
+glm::vec3 dynamicSkyboxCubeCoordinate = glm::vec3(2.0f, 2.0f, 1.2f);
+
 
 // camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -412,9 +415,8 @@ int main()
             }
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
             glm::mat4 model = glm::mat4(1.0f);
-            glm::vec3 dynamicSkyboxCube = glm::vec3(2.0f, 2.0f, 1.2f);
-            model = glm::translate(model, dynamicSkyboxCube);
-            glm::mat4 view = glm::lookAt(dynamicSkyboxCube, dynamicSkyboxCube + envCubeLookAt[i].first, envCubeLookAt[i].second);
+            model = glm::translate(model, dynamicSkyboxCubeCoordinate);
+            glm::mat4 view = glm::lookAt(dynamicSkyboxCubeCoordinate, dynamicSkyboxCubeCoordinate + envCubeLookAt[i].first, envCubeLookAt[i].second);
             renderAllObjs(floorTexture, glassTexture, cubeTexture, cubeMapTexture, dynamicEnvSkyboxTexture, false,
                 planeVAO, lightCubeVAO, cubeVAO, grassVAO, skyboxVAO,
                 shader, lightShader, ourShader, ourShader_rectify, edgeShader, skyboxShader, cubeShader,
@@ -713,33 +715,33 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
         glStencilMask(0xff);    // 否则无法clear stencil buffer
         glClear(GL_STENCIL_BUFFER_BIT);
         // cube-2
-        glStencilMask(0xff);    // 所有位可写入
-        glStencilFunc(GL_ALWAYS, 1, 0xff);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        // shader.use();
-        cubeShader.use();
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
-        // shader.setMat4("model", model);
-        cubeShader.setMat4("model", model);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        // scaled cube-2
-        glStencilMask(0x00);
-        glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-        edgeShader.use();
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
-        // model = glm::scale(model, glm::vec3(1.05f));
-        edgeShader.setMat4("model", model);
-        edgeShader.setMat4("view", view);
-        edgeShader.setMat4("projection", projection);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        glBindVertexArray(0);
-        glStencilMask(0xff);
-        glClear(GL_STENCIL_BUFFER_BIT); 
+        // glStencilMask(0xff);    // 所有位可写入
+        // glStencilFunc(GL_ALWAYS, 1, 0xff);
+        // glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+        // // shader.use();
+        // cubeShader.use();
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+        // model = glm::mat4(1.0f);
+        // model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
+        // // shader.setMat4("model", model);
+        // cubeShader.setMat4("model", model);
+        // glDrawArrays(GL_TRIANGLES, 0, 36);
+        // // scaled cube-2
+        // glStencilMask(0x00);
+        // glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+        // glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        // edgeShader.use();
+        // model = glm::mat4(1.0f);
+        // model = glm::translate(model, glm::vec3(2.0f, 0.05f, 0.0f));
+        // // model = glm::scale(model, glm::vec3(1.05f));
+        // edgeShader.setMat4("model", model);
+        // edgeShader.setMat4("view", view);
+        // edgeShader.setMat4("projection", projection);
+        // glDrawArrays(GL_TRIANGLES, 0, 36);
+        // glBindVertexArray(0);
+        // glStencilMask(0xff);
+        // glClear(GL_STENCIL_BUFFER_BIT); 
 
         // skybox   最用渲染skybox，利用Early-Z优化性能
         // 先渲染天空盒，在渲染grass，可以是glass看到天空盒
@@ -763,44 +765,41 @@ void renderAllObjs(unsigned int floorTexture, unsigned int glassTexture, unsigne
             cubeShader.setMat4("view", view);
             model = glm::mat4(1.0f);
             // 下面的vec3是cube/sphere的世界坐标
-            model = glm::translate(model, glm::vec3(2.0f, 2.0f, 1.2f));
-            model = glm::scale(model, glm::vec3(2.0f));
+            model = glm::translate(model, dynamicSkyboxCubeCoordinate);
+            // model = glm::scale(model, glm::vec3(2.0f));
             cubeShader.setMat4("model", model);
             // ------------------
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, dynamicEnvSkyboxTexture);
-            sphere.Draw(cubeShader);
-            // ------------------
-            // glBindVertexArray(cubeVAO);
             // glActiveTexture(GL_TEXTURE0);
             // glBindTexture(GL_TEXTURE_CUBE_MAP, dynamicEnvSkyboxTexture);
-            // glDrawArrays(GL_TRIANGLES, 0, 36);
+            // sphere.Draw(cubeShader);
+            // ------------------
+            glBindVertexArray(cubeVAO);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, dynamicEnvSkyboxTexture);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 
 
         // grass
-        glBindVertexArray(grassVAO);
-        glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, grassTexture);
-        glBindTexture(GL_TEXTURE_2D, glassTexture);
-        std::map<float, glm::vec3> sorted;
-        // from far to near in camera direction
-        for(unsigned int i=0; i<vegetation.size(); i++) {
-            float distance = glm::length(camera.position - vegetation[i]);
-            sorted[distance] = vegetation[i];   // sorted map
-        }
-        shader.use();
+        // glBindVertexArray(grassVAO);
+        // glActiveTexture(GL_TEXTURE0);
+        // // glBindTexture(GL_TEXTURE_2D, grassTexture);
+        // glBindTexture(GL_TEXTURE_2D, glassTexture);
+        // std::map<float, glm::vec3> sorted;
+        // // from far to near in camera direction
         // for(unsigned int i=0; i<vegetation.size(); i++) {
-        for(std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin(); it != sorted.rend(); it++) {
-            model = glm::mat4(1.0f);
-            model = glm::translate(model, it->second);
-            shader.setMat4("model", model);
-            glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
-        }
-
-        
-
-        
+        //     float distance = glm::length(camera.position - vegetation[i]);
+        //     sorted[distance] = vegetation[i];   // sorted map
+        // }
+        // shader.use();
+        // // for(unsigned int i=0; i<vegetation.size(); i++) {
+        // for(std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin(); it != sorted.rend(); it++) {
+        //     model = glm::mat4(1.0f);
+        //     model = glm::translate(model, it->second);
+        //     shader.setMat4("model", model);
+        //     glDrawArrays(GL_TRIANGLES, 0, 6);   // 只绘制一个面
+        // }
+   
 
 }
 
@@ -855,6 +854,19 @@ void processInput(GLFWwindow *window)
         outLine += 0.001f;
     if(glfwGetKey(window, GLFW_KEY_PAGE_DOWN)==GLFW_PRESS)
         outLine -= 0.001f;
+    if(glfwGetKey(window, GLFW_KEY_UP)==GLFW_PRESS) {
+        dynamicSkyboxCubeCoordinate.z -= 0.1f;
+    }
+    if(glfwGetKey(window, GLFW_KEY_DOWN)==GLFW_PRESS) {
+        dynamicSkyboxCubeCoordinate.z += 0.1f;
+    }
+    if(glfwGetKey(window, GLFW_KEY_LEFT)==GLFW_PRESS) {
+        dynamicSkyboxCubeCoordinate.x -= 0.1f;
+    }
+    if(glfwGetKey(window, GLFW_KEY_RIGHT)==GLFW_PRESS) {
+        dynamicSkyboxCubeCoordinate.x += 0.1f;
+    }
+    
 
 }
 

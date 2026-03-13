@@ -22,7 +22,7 @@ void main()
     float ratio = 1.0 / 1.52;
     vec3 camera_out = refract(camera_in, normalize(Normal), ratio);
     // vec4 texColor = texture(skybox, camera_out);
-    vec4 texColor = texture(skybox, vec3(camera_in.x, -camera_in.y, camera_in.z));
+    vec4 texColor = texture(skybox, vec3(camera_in.x, camera_in.y, camera_in.z));
     // if(texColor.a < 0.1f) discard;  // terminate this fragment
     FragColor = vec4(texColor.rgb, 1.0);
     // FragColor = vec4(vec3(1.0f), 1.0f);
