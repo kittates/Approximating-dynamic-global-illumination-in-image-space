@@ -1,7 +1,7 @@
 #version 410 core
 out vec4 FragColor;
 
-in vec2 TexCoords;
+// in vec2 TexCoords;
 in vec3 Position;
 in vec3 Normal;
 
@@ -15,7 +15,6 @@ uniform float far;
 
 void main()
 {   
-    // 3D sample
     vec3 camera_in = normalize(Position - cameraPos);
     // reflect
     // vec3 camera_out = reflect(camera_in, normalize(Normal));
@@ -23,17 +22,12 @@ void main()
     float ratio = 1.0 / 1.52;
     vec3 camera_out = refract(camera_in, normalize(Normal), ratio);
     // vec4 texColor = texture(skybox, camera_out);
-    vec4 texColor = texture(skybox, vec3(camera_in.x, camera_in.y, camera_in.z));
+    vec4 texColor = texture(skybox, camera_in);
     // if(texColor.a < 0.1f) discard;  // terminate this fragment
     FragColor = vec4(texColor.rgb, 1.0);
-    // FragColor = vec4(vec3(1.0f), 1.0f);
     // FragColor = vec4(vec3(), 1.0f);
     // float depth = (linearizeDepth(gl_FragCoord.z) - near) / (far - near);
     // FragColor = vec4(vec3(1.0f - depth), 1.0f);
-
-    // 2D sample
-    /*vec4 color = texture(texture1, TexCoords);
-    FragColor = color;*/
     
 }
 
