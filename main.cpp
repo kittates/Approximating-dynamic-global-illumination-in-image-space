@@ -27,7 +27,7 @@ const int SSDO_KERNEL_SIZE = 32;
 const unsigned int SHADOW_SIZE = 1024;
 const float SHADOW_NEAR = 0.05f;
 const float SHADOW_FAR = 8.0f;
-const unsigned int RSM_SIZE = 512;
+const unsigned int RSM_SIZE = 1024;
 const float RSM_NEAR = 0.05f;
 const float RSM_FAR = 8.0f;
 
@@ -50,6 +50,7 @@ float ssdoBias = 0.02f;
 float ssdoDetailStrength = 1.2f;
 float rsmIntensity = 1.2f;
 float rsmSampleRadius = 0.22f;
+bool enableSSDODetail = true;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void)window;
@@ -162,6 +163,14 @@ void processInput(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
         rsmIntensity = std::max(rsmIntensity - 0.6f * deltaTime, 0.0f);
     }
+
+    static bool bKeyLatch = false;
+    bool bDown = glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS;
+    if (bDown && !bKeyLatch) {
+        enableSSDODetail = !enableSSDODetail;
+        std::cout << "[TOGGLE] SSDO detail " << (enableSSDODetail ? "ON" : "OFF") << std::endl;
+    }
+    bKeyLatch = bDown;
 }
 
 void renderQuad() {
@@ -240,6 +249,19 @@ unsigned int createColorAttachment(unsigned int width, unsigned int height, GLen
     glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, static_cast<int>(width), static_cast<int>(height), 0, format, type, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return tex;
+}
+
+unsigned int createColorAttachmentLinear(unsigned int width, unsigned int height, GLenum internalFormat, GLenum format, GLenum type) {
+    unsigned int tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, static_cast<int>(width), static_cast<int>(height), 0, format, type, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -426,6 +448,7 @@ int main() {
     Shader peelShader("./shader/ssdo/depth_peel.vert", "./shader/ssdo/depth_peel.frag");
     Shader rsmCaptureShader("./shader/ssdo/rsm_capture.vert", "./shader/ssdo/rsm_capture.frag");
     Shader rsmGatherShader("./shader/ssdo/screen_quad.vert", "./shader/ssdo/rsm_gather.frag");
+    Shader rsmBlurShader("./shader/ssdo/screen_quad.vert", "./shader/ssdo/rsm_blur.frag");
     Shader ssdoShader("./shader/ssdo/screen_quad.vert", "./shader/ssdo/ssdo.frag");
     Shader blurShader("./shader/ssdo/screen_quad.vert", "./shader/ssdo/blur.frag");
     Shader compositeShader("./shader/ssdo/screen_quad.vert", "./shader/ssdo/composite.frag");
@@ -517,8 +540,8 @@ int main() {
     glGenFramebuffers(1, &rsmFBO);
     glBindFramebuffer(GL_FRAMEBUFFER, rsmFBO);
 
-    rsmFluxTex = createColorAttachment(RSM_SIZE, RSM_SIZE, GL_RGB16F, GL_RGB, GL_FLOAT);
-    rsmNormalTex = createColorAttachment(RSM_SIZE, RSM_SIZE, GL_RGB16F, GL_RGB, GL_FLOAT);
+    rsmFluxTex = createColorAttachmentLinear(RSM_SIZE, RSM_SIZE, GL_RGB16F, GL_RGB, GL_FLOAT);
+    rsmNormalTex = createColorAttachmentLinear(RSM_SIZE, RSM_SIZE, GL_RGB16F, GL_RGB, GL_FLOAT);
     rsmDepthTex = createDepthTexture(RSM_SIZE, RSM_SIZE);
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rsmFluxTex, 0);
@@ -534,9 +557,17 @@ int main() {
     unsigned int rsmGiTex = 0;
     glGenFramebuffers(1, &rsmGiFBO);
     glBindFramebuffer(GL_FRAMEBUFFER, rsmGiFBO);
-    rsmGiTex = createColorAttachment(SCR_WIDTH, SCR_HEIGHT, GL_RGB16F, GL_RGB, GL_FLOAT);
+    rsmGiTex = createColorAttachmentLinear(SCR_WIDTH, SCR_HEIGHT, GL_RGB16F, GL_RGB, GL_FLOAT);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rsmGiTex, 0);
     checkFramebufferComplete("rsmGiFBO");
+
+    unsigned int rsmSmoothFBO = 0;
+    unsigned int rsmSmoothTex = 0;
+    glGenFramebuffers(1, &rsmSmoothFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, rsmSmoothFBO);
+    rsmSmoothTex = createColorAttachmentLinear(SCR_WIDTH, SCR_HEIGHT, GL_RGB16F, GL_RGB, GL_FLOAT);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rsmSmoothTex, 0);
+    checkFramebufferComplete("rsmSmoothFBO");
 
     unsigned int ssdoFBO = 0;
     unsigned int ssdoColor = 0;
@@ -568,6 +599,10 @@ int main() {
     rsmGatherShader.setInt("rsmNormal", 5);
     rsmGatherShader.setInt("rsmDepth", 6);
 
+    rsmBlurShader.use();
+    rsmBlurShader.setInt("rsmInput", 0);
+    rsmBlurShader.setInt("depthTex", 1);
+
     ssdoShader.use();
     ssdoShader.setInt("gPosition", 0);
     ssdoShader.setInt("gNormal", 1);
@@ -594,6 +629,7 @@ int main() {
     compositeShader.setInt("ssdoTex", 4);
     compositeShader.setInt("rsmGiTex", 5);
     compositeShader.setInt("shadowCube", 6);
+    compositeShader.setInt("uEnableSSDODetail", 1);
 
     while (!glfwWindowShouldClose(window)) {
         const float currentFrame = static_cast<float>(glfwGetTime());
@@ -690,7 +726,7 @@ int main() {
         rsmGatherShader.setMat4("lightVP", lightVP);
         rsmGatherShader.setMat4("invLightVP", glm::inverse(lightVP));
         rsmGatherShader.setFloat("sampleRadius", rsmSampleRadius);
-        rsmGatherShader.setInt("sampleCount", 48);
+        rsmGatherShader.setInt("sampleCount", 64);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -706,6 +742,21 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, rsmNormalTex);
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_2D, rsmDepthTex);
+
+        renderQuad();
+
+        // Pass 4.5: blur RSM coarse GI to remove blocky artifacts.
+        glBindFramebuffer(GL_FRAMEBUFFER, rsmSmoothFBO);
+        glDisable(GL_DEPTH_TEST);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        rsmBlurShader.use();
+        glUniform2f(glGetUniformLocation(rsmBlurShader.ID, "texelSize"), 1.0f / static_cast<float>(SCR_WIDTH), 1.0f / static_cast<float>(SCR_HEIGHT));
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, rsmGiTex);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, gDepth);
 
         renderQuad();
 
@@ -776,6 +827,7 @@ int main() {
         compositeShader.setFloat("ambientStrength", ambientStrength);
         compositeShader.setFloat("rsmIntensity", rsmIntensity);
         compositeShader.setFloat("ssdoDetailStrength", ssdoDetailStrength);
+        compositeShader.setInt("uEnableSSDODetail", enableSSDODetail ? 1 : 0);
         compositeShader.setFloat("diffuseStrength", 1.0f);
         compositeShader.setFloat("specularStrength", 0.05f);
         compositeShader.setFloat("shininess", 32.0f);
@@ -791,7 +843,7 @@ int main() {
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, blurColor);
         glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D, rsmGiTex);
+        glBindTexture(GL_TEXTURE_2D, rsmSmoothTex);
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_CUBE_MAP, pointShadowCube);
 
@@ -826,6 +878,7 @@ int main() {
     glDeleteFramebuffers(1, &peelFBO);
     glDeleteFramebuffers(1, &rsmFBO);
     glDeleteFramebuffers(1, &rsmGiFBO);
+    glDeleteFramebuffers(1, &rsmSmoothFBO);
     glDeleteFramebuffers(1, &ssdoFBO);
     glDeleteFramebuffers(1, &blurFBO);
 
@@ -842,6 +895,7 @@ int main() {
     glDeleteTextures(1, &rsmNormalTex);
     glDeleteTextures(1, &rsmDepthTex);
     glDeleteTextures(1, &rsmGiTex);
+    glDeleteTextures(1, &rsmSmoothTex);
     glDeleteTextures(1, &ssdoColor);
     glDeleteTextures(1, &blurColor);
     glDeleteTextures(1, &noiseTex);

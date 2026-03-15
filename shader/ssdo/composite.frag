@@ -23,6 +23,7 @@ uniform float ssdoDetailStrength;
 uniform float diffuseStrength;
 uniform float specularStrength;
 uniform float shininess;
+uniform int uEnableSSDODetail;
 
 const vec3 gridSamplingDisk[20] = vec3[](
     vec3(1, 1, 1), vec3(1, -1, 1), vec3(-1, -1, 1), vec3(-1, 1, 1),
@@ -72,8 +73,9 @@ void main() {
     vec3 normalWS = normalize(mat3(invView) * normalVS);
 
     vec4 ssdo = texture(ssdoTex, TexCoords);
-    vec3 ssdoDetailIndirect = max(ssdo.rgb, vec3(0.0)) * ssdoDetailStrength;
-    float ssdoDetailShadow = clamp(ssdo.a * ssdoDetailStrength, 0.0, 1.0);
+    float ssdoEnable = (uEnableSSDODetail != 0) ? 1.0 : 0.0;
+    vec3 ssdoDetailIndirect = max(ssdo.rgb, vec3(0.0)) * ssdoDetailStrength * ssdoEnable;
+    float ssdoDetailShadow = clamp(ssdo.a * ssdoDetailStrength * ssdoEnable, 0.0, 1.0);
 
     vec3 rsmCoarseIndirect = max(texture(rsmGiTex, TexCoords).rgb, vec3(0.0)) * rsmIntensity;
 
