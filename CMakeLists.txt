@@ -6,12 +6,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(app
-    # main.cpp
-    depth_testing.cpp
+    main.cpp
     glad.c
     shader.cpp
     stb_image.cpp
-    
 )
 
 target_include_directories(app PRIVATE
@@ -31,4 +29,3 @@ target_link_libraries(app PRIVATE
     pthread
     assimp
 )
-
