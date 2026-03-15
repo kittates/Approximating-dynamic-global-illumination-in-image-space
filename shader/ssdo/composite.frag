@@ -94,12 +94,16 @@ void main() {
     vec3 specular = specularStrength * spec * lightColor * attenuation;
 
     float coarseShadow = calculateShadow(fragPosWS, normalWS);
-    float combinedShadow = clamp(max(coarseShadow, ssdoDetailShadow), 0.0, 1.0);
+    float combinedShadow = coarseShadow;
+    if (ssdoEnable > 0.5) {
+        combinedShadow = clamp(coarseShadow + ssdoDetailShadow * (1.0 - coarseShadow), 0.0, 1.0);
+    }
 
     vec3 ambient = ambientStrength * albedo;
     vec3 direct = (1.0 - combinedShadow) * (diffuse + specular);
 
-    vec3 color = ambient + direct + rsmCoarseIndirect + ssdoDetailIndirect;
+    vec3 indirect = min(rsmCoarseIndirect + ssdoDetailIndirect, vec3(0.8));
+    vec3 color = ambient + direct + indirect;
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));

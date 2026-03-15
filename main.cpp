@@ -42,14 +42,15 @@ float lastFrame = 0.0f;
 
 glm::vec3 lightPosWorld(0.0f, 0.78f, -0.1f);
 glm::vec3 lightBaseColor(1.0f, 1.0f, 1.0f);
-float pointLightIntensity = 4.0f;
-float ambientStrength = 0.08f;
+float pointLightIntensity = 3.0f;
+float ambientStrength = 0.02f;
 
 float ssdoRadius = 0.32f;
 float ssdoBias = 0.02f;
-float ssdoDetailStrength = 1.2f;
-float rsmIntensity = 1.2f;
-float rsmSampleRadius = 0.22f;
+float ssdoDetailStrength = 2.0f;
+float rsmIntensity = 0.95f;
+float rsmSampleRadius = 0.20f;
+float rsmDepthBias = 0.0015f;
 bool enableSSDODetail = true;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -163,12 +164,18 @@ void processInput(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
         rsmIntensity = std::max(rsmIntensity - 0.6f * deltaTime, 0.0f);
     }
+    if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS) {
+        rsmDepthBias = std::min(rsmDepthBias + 0.004f * deltaTime, 0.01f);
+    }
+    if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS) {
+        rsmDepthBias = std::max(rsmDepthBias - 0.004f * deltaTime, 0.0f);
+    }
 
     static bool bKeyLatch = false;
     bool bDown = glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS;
     if (bDown && !bKeyLatch) {
         enableSSDODetail = !enableSSDODetail;
-        std::cout << "[TOGGLE] SSDO detail " << (enableSSDODetail ? "ON" : "OFF") << std::endl;
+        std::cout << "[TOGGLE] Compare mode: " << (enableSSDODetail ? "RSM + SSDO detail" : "RSM only (no SSDO detail)") << std::endl;
     }
     bKeyLatch = bDown;
 }
@@ -330,7 +337,26 @@ glm::mat4 buildRsmLightVP(const glm::vec3& lightPos) {
     return lightProj * lightView;
 }
 
-void drawScene(Shader& shader, Model& room, Model& largeBox, Model& smallBox) {
+std::string resolveAnimalModelDir() {
+    const std::array<std::string, 4> candidates = {
+        "../model/animal",
+        "./model/animal",
+        "../../model/animal",
+        "../../../model/animal",
+    };
+
+    for (const auto& dir : candidates) {
+        if (std::filesystem::exists(dir + "/stanford_bunny.obj") &&
+            std::filesystem::exists(dir + "/armadillo.obj")) {
+            return dir;
+        }
+    }
+
+    std::cerr << "[WARN] animal models not found in fallback paths, using default: " << candidates[0] << std::endl;
+    return candidates[0];
+}
+
+void drawScene(Shader& shader, Model& room, Model& bunny, Model& armadillo) {
     glm::mat4 roomModel = glm::mat4(1.0f);
     roomModel = glm::translate(roomModel, glm::vec3(0.98f, -1.0f, 0.95f));
     roomModel = glm::rotate(roomModel, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -339,21 +365,25 @@ void drawScene(Shader& shader, Model& room, Model& largeBox, Model& smallBox) {
     shader.setVec3("uFallbackColor", glm::vec3(0.74f));
     room.Draw(shader);
 
-    glm::mat4 largeModel = glm::mat4(1.0f);
-    largeModel = glm::translate(largeModel, glm::vec3(-0.25f, -0.725f, -0.45f));
-    largeModel = glm::rotate(largeModel, glm::radians(-16.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    largeModel = glm::scale(largeModel, glm::vec3(0.34f, 0.55f, 0.34f));
-    shader.setMat4("model", largeModel);
-    shader.setVec3("uFallbackColor", glm::vec3(0.62f));
-    largeBox.Draw(shader);
+    // Replace the previous box with a bunny to emphasize contact shadows and detail GI.
+    // Rotate 180 degrees to face the camera and enlarge for clearer SSDO contrast.
+    glm::mat4 bunnyModel = glm::mat4(1.0f);
+    bunnyModel = glm::translate(bunnyModel, glm::vec3(-0.46f, -1.26f, -0.36f));
+    bunnyModel = glm::rotate(bunnyModel, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    bunnyModel = glm::scale(bunnyModel, glm::vec3(7.8f));
+    shader.setMat4("model", bunnyModel);
+    shader.setVec3("uFallbackColor", glm::vec3(0.70f, 0.70f, 0.68f));
+    bunny.Draw(shader);
 
-    glm::mat4 smallModel = glm::mat4(1.0f);
-    smallModel = glm::translate(smallModel, glm::vec3(0.30f, -0.85f, -0.13f));
-    smallModel = glm::rotate(smallModel, glm::radians(18.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    smallModel = glm::scale(smallModel, glm::vec3(0.25f, 0.30f, 0.25f));
-    shader.setMat4("model", smallModel);
-    shader.setVec3("uFallbackColor", glm::vec3(0.64f));
-    smallBox.Draw(shader);
+    // Use a second animal model so B-toggle comparison is obvious on curved geometry.
+    // Rotate 180 degrees to face the camera and enlarge for clearer contact shadows.
+    glm::mat4 armadilloModel = glm::mat4(1.0f);
+    armadilloModel = glm::translate(armadilloModel, glm::vec3(0.38f, -0.58f, -0.22f));
+    armadilloModel = glm::rotate(armadilloModel, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    armadilloModel = glm::scale(armadilloModel, glm::vec3(0.0078f));
+    shader.setMat4("model", armadilloModel);
+    shader.setVec3("uFallbackColor", glm::vec3(0.73f, 0.71f, 0.69f));
+    armadillo.Draw(shader);
 }
 
 std::vector<glm::vec3> buildKernel() {
@@ -456,13 +486,19 @@ int main() {
     Shader lightShader("./shader/light/light.vert", "./shader/light/light.frag");
 
     const std::string modelDir = resolveCornellModelDir();
+    const std::string animalDir = resolveAnimalModelDir();
     std::string roomPath = modelDir + "/cornell_box.obj";
-    std::string largePath = modelDir + "/large_box.obj";
-    std::string smallPath = modelDir + "/small_box.obj";
+    std::string bunnyPath = animalDir + "/stanford_bunny.obj";
+    std::string armadilloPath = animalDir + "/armadillo.obj";
 
     Model roomModel(const_cast<char*>(roomPath.c_str()));
-    Model largeBoxModel(const_cast<char*>(largePath.c_str()));
-    Model smallBoxModel(const_cast<char*>(smallPath.c_str()));
+    Model bunnyModel(const_cast<char*>(bunnyPath.c_str()));
+    Model armadilloModel(const_cast<char*>(armadilloPath.c_str()));
+
+    std::cout
+        << "[Controls] I/K point-light intensity, U/J ambient, O/P RSM intensity, N/M RSM depth bias\n"
+        << "[Controls] R/F SSDO radius, T/G RSM sample radius, Y/H SSDO detail strength, B compare toggle"
+        << std::endl;
 
     unsigned int pointShadowFBO = 0;
     unsigned int pointShadowCube = 0;
@@ -666,7 +702,7 @@ int main() {
             );
             glClear(GL_DEPTH_BUFFER_BIT);
             pointShadowShader.setMat4("lightVP", shadowTransforms[face]);
-            drawScene(pointShadowShader, roomModel, largeBoxModel, smallBoxModel);
+            drawScene(pointShadowShader, roomModel, bunnyModel, armadilloModel);
         }
 
         const glm::mat4 lightVP = buildRsmLightVP(lightPosWorld);
@@ -681,7 +717,7 @@ int main() {
         geometryShader.use();
         geometryShader.setMat4("view", view);
         geometryShader.setMat4("projection", projection);
-        drawScene(geometryShader, roomModel, largeBoxModel, smallBoxModel);
+        drawScene(geometryShader, roomModel, bunnyModel, armadilloModel);
 
         // Pass 2: depth peeling for the second layer used by SSDO detail recovery.
         glBindFramebuffer(GL_FRAMEBUFFER, peelFBO);
@@ -700,7 +736,7 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, gDepth);
         peelShader.setInt("uFrontDepth", 3);
 
-        drawScene(peelShader, roomModel, largeBoxModel, smallBoxModel);
+        drawScene(peelShader, roomModel, bunnyModel, armadilloModel);
 
         // Pass 3: coarse GI source generation (RSM capture in light space).
         glBindFramebuffer(GL_FRAMEBUFFER, rsmFBO);
@@ -713,7 +749,7 @@ int main() {
         rsmCaptureShader.setMat4("lightVP", lightVP);
         rsmCaptureShader.setVec3("lightPosWS", lightPosWorld);
         rsmCaptureShader.setVec3("lightColor", lightBaseColor * pointLightIntensity);
-        drawScene(rsmCaptureShader, roomModel, largeBoxModel, smallBoxModel);
+        drawScene(rsmCaptureShader, roomModel, bunnyModel, armadilloModel);
 
         // Pass 4: coarse GI reconstruction from RSM (Chapter 5 first stage).
         glBindFramebuffer(GL_FRAMEBUFFER, rsmGiFBO);
@@ -726,7 +762,8 @@ int main() {
         rsmGatherShader.setMat4("lightVP", lightVP);
         rsmGatherShader.setMat4("invLightVP", glm::inverse(lightVP));
         rsmGatherShader.setFloat("sampleRadius", rsmSampleRadius);
-        rsmGatherShader.setInt("sampleCount", 64);
+        rsmGatherShader.setFloat("depthBias", rsmDepthBias);
+        rsmGatherShader.setInt("sampleCount", 96);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -870,8 +907,8 @@ int main() {
     }
 
     roomModel.Terminate();
-    largeBoxModel.Terminate();
-    smallBoxModel.Terminate();
+    bunnyModel.Terminate();
+    armadilloModel.Terminate();
 
     glDeleteFramebuffers(1, &pointShadowFBO);
     glDeleteFramebuffers(1, &gBuffer);
@@ -903,5 +940,3 @@ int main() {
     glfwTerminate();
     return 0;
 }
-
-

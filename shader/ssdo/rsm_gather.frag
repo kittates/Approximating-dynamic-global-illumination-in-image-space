@@ -15,6 +15,7 @@ uniform mat4 invView;
 uniform mat4 lightVP;
 uniform mat4 invLightVP;
 uniform float sampleRadius;
+uniform float depthBias;
 uniform int sampleCount;
 
 float hash12(vec2 p) {
@@ -51,11 +52,12 @@ void main() {
 
     vec3 fragNdcLS = fragLS.xyz / fragLS.w;
     vec2 baseUV = fragNdcLS.xy * 0.5 + 0.5;
+    float receiverDepthLS = fragNdcLS.z * 0.5 + 0.5;
 
     vec3 indirect = vec3(0.0);
     float valid = 0.0;
 
-    int count = clamp(sampleCount, 1, 64);
+    int count = clamp(sampleCount, 1, 128);
     float minDist = max(0.05, 0.28 * sampleRadius);
     float minDist2 = minDist * minDist;
 
@@ -72,6 +74,10 @@ void main() {
 
         float vplDepth = texture(rsmDepth, uv).r;
         if (vplDepth >= 0.9999) {
+            continue;
+        }
+        // RSM depth bias: suppress near-equal-depth VPLs to reduce self-bleeding artifacts.
+        if (vplDepth > receiverDepthLS - depthBias) {
             continue;
         }
 
