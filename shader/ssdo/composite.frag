@@ -34,17 +34,19 @@ const vec3 gridSamplingDisk[20] = vec3[](
 );
 
 float calculateShadow(vec3 fragPosWS, vec3 normalWS) {
-    vec3 fragToLight = fragPosWS - lightPosWS;
+    vec3 lightDir = normalize(lightPosWS - fragPosWS);
+    float bias = max(0.03 * (1.0 - dot(normalWS, lightDir)), 0.0040);
+
+    // Push receiver along normal to reduce self-shadowing stripes on flat walls.
+    vec3 samplePosWS = fragPosWS + normalWS * (2.0 * bias);
+    vec3 fragToLight = samplePosWS - lightPosWS;
     float currentDepth = length(fragToLight);
     if (currentDepth >= farPlane) {
         return 0.0;
     }
 
-    vec3 lightDir = normalize(lightPosWS - fragPosWS);
-    float bias = max(0.02 * (1.0 - dot(normalWS, lightDir)), 0.0025);
-
     float viewDistance = length(viewPosWS - fragPosWS);
-    float diskRadius = (1.0 + (viewDistance / farPlane)) / 45.0;
+    float diskRadius = mix(0.004, 0.03, clamp(viewDistance / farPlane, 0.0, 1.0));
 
     float shadow = 0.0;
     for (int i = 0; i < 20; ++i) {
@@ -96,7 +98,9 @@ void main() {
     float coarseShadow = calculateShadow(fragPosWS, normalWS);
     float combinedShadow = coarseShadow;
     if (ssdoEnable > 0.5) {
-        combinedShadow = clamp(coarseShadow + ssdoDetailShadow * (1.0 - coarseShadow), 0.0, 1.0);
+        // Detail shadow should mainly reinforce coarse penumbra, not create bands on fully lit walls.
+        float edgeFactor = clamp(4.0 * coarseShadow * (1.0 - coarseShadow), 0.0, 1.0);
+        combinedShadow = clamp(coarseShadow + ssdoDetailShadow * edgeFactor * (1.0 - coarseShadow), 0.0, 1.0);
     }
 
     vec3 ambient = ambientStrength * albedo;

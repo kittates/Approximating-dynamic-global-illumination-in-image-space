@@ -30,7 +30,8 @@ bool isProbeBelowSurface(vec3 probePosVS, vec2 uv) {
     float frontDepth = texture(gDepth, uv).r;
     if (frontDepth < 0.9999) {
         vec3 frontPosVS = texture(gPosition, uv).rgb;
-        if (length(frontPosVS) + bias < length(probePosVS)) {
+        // View-space depth ordering must be done on z along the camera ray.
+        if (frontPosVS.z > probePosVS.z + bias) {
             return true;
         }
     }
@@ -38,12 +39,18 @@ bool isProbeBelowSurface(vec3 probePosVS, vec2 uv) {
     float peeledDepth = texture(peelDepth, uv).r;
     if (peeledDepth < 0.9999) {
         vec3 peeledPosVS = texture(peelPosition, uv).rgb;
-        if (length(peeledPosVS) + bias < length(probePosVS)) {
+        if (peeledPosVS.z > probePosVS.z + bias) {
             return true;
         }
     }
 
     return false;
+}
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }
 
 void accumulateLayer(
@@ -152,10 +159,12 @@ void main() {
     float patchSize = 2.0 * lightDist * shadowMapTexel;
     float undefinedLength = clamp(0.5 * patchSize * tanAlpha, 0.0, 0.25);
 
-    float detailShadow = 0.0;
-    const int SHADOW_STEPS = 8;
+    float shadowAccum = 0.0;
+    float shadowNorm = 0.0;
+    const int SHADOW_STEPS = 12;
+    float jitter = hash12(TexCoords * vec2(389.1, 167.5));
     for (int i = 0; i < SHADOW_STEPS; ++i) {
-        float t = (float(i) + 0.5) / float(SHADOW_STEPS);
+        float t = (float(i) + jitter) / float(SHADOW_STEPS);
         vec3 probeWS = fragPosWS + lightDirWS * undefinedLength * t;
         vec3 probeVS = (view * vec4(probeWS, 1.0)).xyz;
 
@@ -171,10 +180,13 @@ void main() {
         }
 
         if (isProbeBelowSurface(probeVS, probeUV)) {
-            detailShadow = 1.0;
-            break;
+            shadowAccum += (1.0 - t);
         }
+        shadowNorm += 1.0;
     }
+
+    float detailShadow = clamp(shadowAccum / max(shadowNorm, 1.0), 0.0, 1.0);
+    detailShadow = smoothstep(0.12, 0.62, detailShadow);
 
     float norm = max(weightSum, 1.0);
     vec3 detailIndirect = 0.2 * (indirect / norm) * centerAlbedo;
