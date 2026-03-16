@@ -1,0 +1,10 @@
+Animal models used for SSDO reproduction
+
+1) stanford_bunny.obj
+   Source: https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/stanford-bunny.obj
+
+2) armadillo.obj
+   Source: https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/armadillo.obj
+
+Upstream repository:
+https://github.com/alecjacobson/common-3d-test-models

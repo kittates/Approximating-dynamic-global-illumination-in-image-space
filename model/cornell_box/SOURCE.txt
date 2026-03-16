@@ -1,0 +1,12 @@
+Source model repository:
+https://github.com/LucasReSilva/Cornell-Box
+
+Files adapted for this SSDO demo:
+- cornell_box.obj
+- large_box.obj
+- small_box.obj
+- Light.obj
+
+Adaptations:
+- Added MTL bindings for wall/box/light colors in OpenGL runtime.
+- Added local material file: cornell_box.mtl

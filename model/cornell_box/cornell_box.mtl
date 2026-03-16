@@ -1,0 +1,29 @@
+newmtl wall_white
+Ka 0.1 0.1 0.1
+Kd 0.74 0.74 0.74
+Ks 0.0 0.0 0.0
+Ns 10.0
+
+newmtl wall_red
+Ka 0.1 0.02 0.02
+Kd 0.75 0.12 0.12
+Ks 0.0 0.0 0.0
+Ns 10.0
+
+newmtl wall_green
+Ka 0.02 0.1 0.02
+Kd 0.16 0.62 0.18
+Ks 0.0 0.0 0.0
+Ns 10.0
+
+newmtl box_white
+Ka 0.08 0.08 0.08
+Kd 0.62 0.62 0.62
+Ks 0.0 0.0 0.0
+Ns 10.0
+
+newmtl light_white
+Ka 1.0 1.0 1.0
+Kd 1.0 1.0 1.0
+Ks 0.0 0.0 0.0
+Ns 10.0
